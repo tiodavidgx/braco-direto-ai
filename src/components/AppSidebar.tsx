@@ -14,6 +14,7 @@ import {
   Database,
   Menu,
   ChevronLeft,
+  ShieldAlert,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,6 +45,7 @@ const menuItems = [
     items: [
       { title: "Envio de Relatórios", url: "/envio-relatorios", icon: FileText },
       { title: "Histórico de Envios", url: "/historico-envios", icon: Clock },
+      { title: "Blacklist", url: "/blacklist", icon: ShieldAlert },
     ],
   },
   {

@@ -10,6 +10,7 @@ import Prestadores from "./pages/Prestadores";
 import Montadores from "./pages/Montadores";
 import EnvioRelatorios from "./pages/EnvioRelatorios";
 import HistoricoEnvios from "./pages/HistoricoEnvios";
+import Blacklist from "./pages/Blacklist";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
                   <Route path="/montadores" element={<Montadores />} />
                   <Route path="/envio-relatorios" element={<EnvioRelatorios />} />
                   <Route path="/historico-envios" element={<HistoricoEnvios />} />
+                  <Route path="/blacklist" element={<Blacklist />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

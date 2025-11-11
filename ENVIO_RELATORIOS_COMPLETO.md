@@ -22,7 +22,8 @@ Sistema completo para envio de relatórios de prestadores e montadores com:
 │   └── Montadores
 ├── Relatórios ← MÓDULO PRÓPRIO
 │   ├── Envio de Relatórios
-│   └── Histórico de Envios
+│   ├── Histórico de Envios
+│   └── Blacklist
 ├── Financeiro
 │   ├── Pagamentos Vencidos
 │   └── Upload de NFs
