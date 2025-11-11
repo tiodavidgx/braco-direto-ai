@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -33,6 +34,16 @@ export default function Prestadores() {
   const [numerosOS, setNumerosOS] = useState("");
   const [motivo, setMotivo] = useState("");
   const [searchBlacklist, setSearchBlacklist] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Form states
+  const [formNome, setFormNome] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formEmailsAdicionais, setFormEmailsAdicionais] = useState("");
+  const [formFornecedorId, setFormFornecedorId] = useState("");
+  const [formRegraEnvio, setFormRegraEnvio] = useState("Nenhuma");
+  const [formDiasEnvio, setFormDiasEnvio] = useState("");
+  const [formTempoVencimento, setFormTempoVencimento] = useState("10");
 
   // Mock data - será substituído por dados reais da API
   const prestadores = [
@@ -151,6 +162,49 @@ export default function Prestadores() {
     item.motivo?.toLowerCase().includes(searchBlacklist.toLowerCase())
   );
 
+  const adicionarPrestador = async () => {
+    if (!formNome || !formEmail || !formFornecedorId) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/prestadores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: formNome,
+          email: formEmail,
+          fornecedor_id: formFornecedorId,
+          regra_envio: formRegraEnvio,
+          dias_envio: formDiasEnvio,
+          emails_adicionais: formEmailsAdicionais || null,
+          tempo_vencimento_dias: parseInt(formTempoVencimento),
+        }),
+      });
+
+      if (response.ok) {
+        toast.success("Prestador adicionado com sucesso!");
+        setDialogOpen(false);
+        // Limpar form
+        setFormNome("");
+        setFormEmail("");
+        setFormEmailsAdicionais("");
+        setFormFornecedorId("");
+        setFormRegraEnvio("Nenhuma");
+        setFormDiasEnvio("");
+        setFormTempoVencimento("10");
+        // Recarregar lista (adicionar depois quando conectar API real)
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || "Erro ao adicionar prestador");
+      }
+    } catch (error) {
+      toast.error("Erro ao adicionar prestador");
+      console.error(error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -158,10 +212,142 @@ export default function Prestadores() {
           <h1 className="text-3xl font-bold text-foreground">Prestadores</h1>
           <p className="text-muted-foreground">Gerenciar empresas prestadoras de serviços</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Prestador
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Novo Prestador
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Prestador</DialogTitle>
+              <DialogDescription>
+                Preencha os dados do prestador de serviços
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="nome">Nome *</Label>
+                <Input
+                  id="nome"
+                  value={formNome}
+                  onChange={(e) => setFormNome(e.target.value)}
+                  placeholder="Nome da empresa"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="email">E-mail Principal *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formEmail}
+                  onChange={(e) => setFormEmail(e.target.value)}
+                  placeholder="contato@empresa.com"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="emails-adicionais">E-mails Adicionais</Label>
+                <Input
+                  id="emails-adicionais"
+                  value={formEmailsAdicionais}
+                  onChange={(e) => setFormEmailsAdicionais(e.target.value)}
+                  placeholder="email2@empresa.com, email3@empresa.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe múltiplos emails por vírgula
+                </p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="fornecedor">Número do Fornecedor *</Label>
+                <Input
+                  id="fornecedor"
+                  value={formFornecedorId}
+                  onChange={(e) => setFormFornecedorId(e.target.value)}
+                  placeholder="FOR123"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="regra">Regra de Envio</Label>
+                  <Select value={formRegraEnvio} onValueChange={setFormRegraEnvio}>
+                    <SelectTrigger id="regra">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Nenhuma">Nenhuma</SelectItem>
+                      <SelectItem value="Semanal">Semanal</SelectItem>
+                      <SelectItem value="Mensal (Dia Fixo)">Mensal (Dia Fixo)</SelectItem>
+                      <SelectItem value="Quinzenal">Quinzenal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="vencimento">Prazo Pagamento</Label>
+                  <Select value={formTempoVencimento} onValueChange={setFormTempoVencimento}>
+                    <SelectTrigger id="vencimento">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 dias úteis</SelectItem>
+                      <SelectItem value="10">10 dias úteis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {formRegraEnvio === "Semanal" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="dia-semana">Dia da Semana</Label>
+                  <Select value={formDiasEnvio} onValueChange={setFormDiasEnvio}>
+                    <SelectTrigger id="dia-semana">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Segunda-feira">Segunda-feira</SelectItem>
+                      <SelectItem value="Terça-feira">Terça-feira</SelectItem>
+                      <SelectItem value="Quarta-feira">Quarta-feira</SelectItem>
+                      <SelectItem value="Quinta-feira">Quinta-feira</SelectItem>
+                      <SelectItem value="Sexta-feira">Sexta-feira</SelectItem>
+                      <SelectItem value="Sábado">Sábado</SelectItem>
+                      <SelectItem value="Domingo">Domingo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {(formRegraEnvio === "Mensal (Dia Fixo)" || formRegraEnvio === "Quinzenal") && (
+                <div className="grid gap-2">
+                  <Label htmlFor="dias-mes">Dias do Mês</Label>
+                  <Input
+                    id="dias-mes"
+                    value={formDiasEnvio}
+                    onChange={(e) => setFormDiasEnvio(e.target.value)}
+                    placeholder="Ex: 5 ou 5,20"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Para quinzenal, separe dois dias por vírgula
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={adicionarPrestador}>
+                Adicionar Prestador
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Tabs defaultValue="lista" className="space-y-6">

@@ -16,12 +16,12 @@ class MontadorBase(BaseModel):
     nome: str
     identificador: str
     email: EmailStr
+    fornecedor_id: str
     telefone: Optional[str] = None
-    percentual_comissao: float
-    auxilio_semanal: float
+    percentual_comissao: float = 0.05
+    auxilio_semanal: float = 100.0
     ativo: bool = True
-    fornecedor_id: Optional[str] = None
-    regra_envio: Optional[str] = None
+    regra_envio: str = "Nenhuma"
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: int = 10
     emails_adicionais: Optional[str] = None

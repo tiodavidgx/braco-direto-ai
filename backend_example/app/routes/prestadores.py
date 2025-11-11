@@ -15,9 +15,9 @@ router = APIRouter()
 class PrestadorBase(BaseModel):
     nome: str
     email: EmailStr
-    fornecedor_id: Optional[str] = None
+    fornecedor_id: str
     telefone: Optional[str] = None
-    regra_envio: Optional[str] = None
+    regra_envio: str = "Nenhuma"
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: int = 10
     emails_adicionais: Optional[str] = None
