@@ -1,0 +1,26 @@
+# FastAPI e servidor
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Banco de dados
+psycopg2-binary==2.9.9
+
+# Utilitários
+python-dotenv==1.0.0
+pydantic==2.4.2
+
+# Autenticação e segurança
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Requisições HTTP
+requests==2.31.0
+
+# Templates e PDFs
+jinja2==3.1.2
+weasyprint==60.1
+
+# Testes
+pytest==7.4.3
+pytest-cov==4.1.0
+httpx==0.25.1
