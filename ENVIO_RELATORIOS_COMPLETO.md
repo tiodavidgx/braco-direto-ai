@@ -22,8 +22,7 @@ Sistema completo para envio de relatórios de prestadores e montadores com:
 │   └── Montadores
 ├── Relatórios ← MÓDULO PRÓPRIO
 │   ├── Envio de Relatórios
-│   ├── Histórico de Envios
-│   └── Blacklist
+│   └── Histórico de Envios
 ├── Financeiro
 │   ├── Pagamentos Vencidos
 │   └── Upload de NFs
@@ -32,6 +31,14 @@ Sistema completo para envio de relatórios de prestadores e montadores com:
 ```
 
 **Motivo da Separação**: O módulo de relatórios é o coração do sistema, responsável por toda comunicação com prestadores e montadores. Por ser tão crítico, merece sua própria seção independente, separada do financeiro.
+
+### Blacklist
+
+A funcionalidade de **Blacklist** está integrada nas páginas de Prestadores e Montadores:
+- **Prestadores** (`/prestadores`) → Aba "Blacklist de O.S."
+- **Montadores** (`/montadores`) → Aba "Blacklist de Boletins"
+
+Permite bloquear O.S./Boletins específicos para que não sejam enviados novamente. Ver documentação completa em `BLACKLIST_DOCUMENTATION.md`.
 
 ---
 

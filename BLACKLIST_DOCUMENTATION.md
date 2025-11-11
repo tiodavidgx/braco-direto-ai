@@ -313,11 +313,18 @@ async def enviar_relatorios_lote(request: EnvioLoteRequest):
 
 ---
 
-## 📱 Frontend: Página de Blacklist
+## 📱 Frontend: Integração nas Páginas
+
+**IMPORTANTE**: A blacklist está integrada DENTRO das páginas de Prestadores e Montadores, não é uma página separada.
+
+### Localização
+
+- **Prestadores**: `/prestadores` → Aba "Blacklist de O.S."
+- **Montadores**: `/montadores` → Aba "Blacklist de Boletins"
 
 ### Componentes Principais
 
-1. **Tabs de Tipo**: Alterna entre Prestadores e Montadores
+1. **Tabs**: Alterna entre "Lista" e "Blacklist"
 2. **Card de Adição**:
    - Select de entidade (Prestador/Montador)
    - Input de números (aceita múltiplos separados por vírgula)
@@ -330,12 +337,22 @@ async def enviar_relatorios_lote(request: EnvioLoteRequest):
 
 ### Estado e Hooks
 
+**Para Prestadores:**
 ```typescript
-const [tipoAtivo, setTipoAtivo] = useState<"prestadores" | "montadores">("prestadores");
 const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>([]);
-const [entidadeSelecionada, setEntidadeSelecionada] = useState<number | null>(null);
-const [numeros, setNumeros] = useState(""); // Ex: "OS001, OS002, OS003"
+const [prestadorSelecionado, setPrestadorSelecionado] = useState<number | null>(null);
+const [numerosOS, setNumerosOS] = useState(""); // Ex: "OS001, OS002, OS003"
 const [motivo, setMotivo] = useState("");
+const [searchBlacklist, setSearchBlacklist] = useState("");
+```
+
+**Para Montadores:**
+```typescript
+const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>([]);
+const [montadorSelecionado, setMontadorSelecionado] = useState<number | null>(null);
+const [numerosBoletim, setNumerosBoletim] = useState(""); // Ex: "BOL001, BOL002"
+const [motivo, setMotivo] = useState("");
+const [searchBlacklist, setSearchBlacklist] = useState("");
 ```
 
 ### Validações
