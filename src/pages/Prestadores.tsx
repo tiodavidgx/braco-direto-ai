@@ -37,8 +37,10 @@ export default function Prestadores() {
   const [motivo, setMotivo] = useState("");
   const [searchBlacklist, setSearchBlacklist] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [loading, setLoading] = useState(true);
+  const [prestadorEditando, setPrestadorEditando] = useState<Prestador | null>(null);
   
   // Form states
   const [formNome, setFormNome] = useState("");
@@ -143,6 +145,29 @@ export default function Prestadores() {
     item.motivo?.toLowerCase().includes(searchBlacklist.toLowerCase())
   );
 
+  const abrirEdicao = (prestador: Prestador) => {
+    setPrestadorEditando(prestador);
+    setFormNome(prestador.nome);
+    setFormEmail(prestador.email);
+    setFormEmailsAdicionais(prestador.emails_adicionais || "");
+    setFormFornecedorId(prestador.fornecedor_id);
+    setFormRegraEnvio(prestador.regra_envio || "Nenhuma");
+    setFormDiasEnvio(prestador.dias_envio || "");
+    setFormTempoVencimento(prestador.tempo_vencimento_dias?.toString() || "10");
+    setEditDialogOpen(true);
+  };
+
+  const limparForm = () => {
+    setFormNome("");
+    setFormEmail("");
+    setFormEmailsAdicionais("");
+    setFormFornecedorId("");
+    setFormRegraEnvio("Nenhuma");
+    setFormDiasEnvio("");
+    setFormTempoVencimento("10");
+    setPrestadorEditando(null);
+  };
+
   const adicionarPrestador = async () => {
     if (!formNome || !formEmail || !formFornecedorId) {
       toast.error("Preencha todos os campos obrigatórios");
@@ -167,15 +192,7 @@ export default function Prestadores() {
       if (response.ok) {
         toast.success("Prestador adicionado com sucesso!");
         setDialogOpen(false);
-        // Limpar form
-        setFormNome("");
-        setFormEmail("");
-        setFormEmailsAdicionais("");
-        setFormFornecedorId("");
-        setFormRegraEnvio("Nenhuma");
-        setFormDiasEnvio("");
-        setFormTempoVencimento("10");
-        // Recarregar lista
+        limparForm();
         carregarPrestadores();
       } else {
         const error = await response.json();
@@ -187,6 +204,33 @@ export default function Prestadores() {
     }
   };
 
+  const editarPrestador = async () => {
+    if (!prestadorEditando || !formNome || !formEmail || !formFornecedorId) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    try {
+      await prestadoresService.update(prestadorEditando.id, {
+        nome: formNome,
+        email: formEmail,
+        fornecedor_id: formFornecedorId,
+        regra_envio: formRegraEnvio,
+        dias_envio: formDiasEnvio,
+        emails_adicionais: formEmailsAdicionais || null,
+        tempo_vencimento_dias: parseInt(formTempoVencimento),
+      });
+
+      toast.success("Prestador atualizado com sucesso!");
+      setEditDialogOpen(false);
+      limparForm();
+      carregarPrestadores();
+    } catch (error) {
+      toast.error("Erro ao atualizar prestador");
+      console.error(error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -194,7 +238,10 @@ export default function Prestadores() {
           <h1 className="text-3xl font-bold text-foreground">Prestadores</h1>
           <p className="text-muted-foreground">Gerenciar empresas prestadoras de serviços</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) limparForm();
+        }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -409,7 +456,7 @@ export default function Prestadores() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => abrirEdicao(prestador)}>
                       Editar
                     </Button>
                   </TableCell>
@@ -417,6 +464,141 @@ export default function Prestadores() {
               ))}
             </TableBody>
           </Table>
+          
+          {/* Dialog de Edição */}
+          <Dialog open={editDialogOpen} onOpenChange={(open) => {
+            setEditDialogOpen(open);
+            if (!open) limparForm();
+          }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Prestador</DialogTitle>
+                <DialogDescription>
+                  Atualize os dados do prestador de serviços
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-nome">Nome *</Label>
+                  <Input
+                    id="edit-nome"
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
+                    placeholder="Nome da empresa"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-email">E-mail Principal *</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="contato@empresa.com"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-emails-adicionais">E-mails Adicionais</Label>
+                  <Input
+                    id="edit-emails-adicionais"
+                    value={formEmailsAdicionais}
+                    onChange={(e) => setFormEmailsAdicionais(e.target.value)}
+                    placeholder="email2@empresa.com, email3@empresa.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Separe múltiplos emails por vírgula
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-fornecedor">Número do Fornecedor *</Label>
+                  <Input
+                    id="edit-fornecedor"
+                    value={formFornecedorId}
+                    onChange={(e) => setFormFornecedorId(e.target.value)}
+                    placeholder="FOR123"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-regra">Regra de Envio</Label>
+                    <Select value={formRegraEnvio} onValueChange={setFormRegraEnvio}>
+                      <SelectTrigger id="edit-regra">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Nenhuma">Nenhuma</SelectItem>
+                        <SelectItem value="Semanal">Semanal</SelectItem>
+                        <SelectItem value="Mensal (Dia Fixo)">Mensal (Dia Fixo)</SelectItem>
+                        <SelectItem value="Quinzenal">Quinzenal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-vencimento">Prazo Pagamento</Label>
+                    <Select value={formTempoVencimento} onValueChange={setFormTempoVencimento}>
+                      <SelectTrigger id="edit-vencimento">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 dias úteis</SelectItem>
+                        <SelectItem value="10">10 dias úteis</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {formRegraEnvio === "Semanal" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-dia-semana">Dia da Semana</Label>
+                    <Select value={formDiasEnvio} onValueChange={setFormDiasEnvio}>
+                      <SelectTrigger id="edit-dia-semana">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Segunda-feira">Segunda-feira</SelectItem>
+                        <SelectItem value="Terça-feira">Terça-feira</SelectItem>
+                        <SelectItem value="Quarta-feira">Quarta-feira</SelectItem>
+                        <SelectItem value="Quinta-feira">Quinta-feira</SelectItem>
+                        <SelectItem value="Sexta-feira">Sexta-feira</SelectItem>
+                        <SelectItem value="Sábado">Sábado</SelectItem>
+                        <SelectItem value="Domingo">Domingo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {(formRegraEnvio === "Mensal (Dia Fixo)" || formRegraEnvio === "Quinzenal") && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-dias-mes">Dias do Mês</Label>
+                    <Input
+                      id="edit-dias-mes"
+                      value={formDiasEnvio}
+                      onChange={(e) => setFormDiasEnvio(e.target.value)}
+                      placeholder="Ex: 5 ou 5,20"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Para quinzenal, separe dois dias por vírgula
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={editarPrestador}>
+                  Salvar Alterações
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
         </TabsContent>

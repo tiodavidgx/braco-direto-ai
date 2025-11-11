@@ -37,8 +37,10 @@ export default function Montadores() {
   const [motivo, setMotivo] = useState("");
   const [searchBlacklist, setSearchBlacklist] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [montadores, setMontadores] = useState<Montador[]>([]);
   const [loading, setLoading] = useState(true);
+  const [montadorEditando, setMontadorEditando] = useState<Montador | null>(null);
   
   // Form states
   const [formNome, setFormNome] = useState("");
@@ -196,6 +198,64 @@ export default function Montadores() {
     }
   };
 
+  const abrirEdicao = (montador: Montador) => {
+    setMontadorEditando(montador);
+    setFormNome(montador.nome);
+    setFormIdentificador(montador.identificador);
+    setFormEmail(montador.email);
+    setFormEmailsAdicionais(montador.emails_adicionais || "");
+    setFormFornecedorId(montador.fornecedor_id);
+    setFormPercentualComissao(((montador.percentual_comissao || 0.05) * 100).toString());
+    setFormAuxilioSemanal((montador.auxilio_semanal || 100).toString());
+    setFormRegraEnvio(montador.regra_envio || "Nenhuma");
+    setFormDiasEnvio(montador.dias_envio || "");
+    setFormTempoVencimento(montador.tempo_vencimento_dias?.toString() || "10");
+    setEditDialogOpen(true);
+  };
+
+  const limparForm = () => {
+    setFormNome("");
+    setFormIdentificador("");
+    setFormEmail("");
+    setFormEmailsAdicionais("");
+    setFormFornecedorId("");
+    setFormPercentualComissao("5.0");
+    setFormAuxilioSemanal("100.00");
+    setFormRegraEnvio("Nenhuma");
+    setFormDiasEnvio("");
+    setFormTempoVencimento("10");
+    setMontadorEditando(null);
+  };
+
+  const editarMontador = async () => {
+    if (!montadorEditando || !formNome || !formIdentificador || !formEmail || !formFornecedorId) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    try {
+      await montadoresService.update(montadorEditando.id, {
+        nome: formNome,
+        email: formEmail,
+        fornecedor_id: formFornecedorId,
+        emails_adicionais: formEmailsAdicionais || null,
+        percentual_comissao: parseFloat(formPercentualComissao) / 100,
+        auxilio_semanal: parseFloat(formAuxilioSemanal),
+        regra_envio: formRegraEnvio,
+        dias_envio: formDiasEnvio,
+        tempo_vencimento_dias: parseInt(formTempoVencimento),
+      });
+
+      toast.success("Montador atualizado com sucesso!");
+      setEditDialogOpen(false);
+      limparForm();
+      carregarMontadores();
+    } catch (error) {
+      toast.error("Erro ao atualizar montador");
+      console.error(error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -203,7 +263,10 @@ export default function Montadores() {
           <h1 className="text-3xl font-bold text-foreground">Montadores</h1>
           <p className="text-muted-foreground">Gerenciar profissionais de montagem</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) limparForm();
+        }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -459,7 +522,7 @@ export default function Montadores() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => abrirEdicao(montador)}>
                       Editar
                     </Button>
                   </TableCell>
@@ -467,6 +530,181 @@ export default function Montadores() {
               ))}
             </TableBody>
           </Table>
+
+          {/* Dialog de Edição */}
+          <Dialog open={editDialogOpen} onOpenChange={(open) => {
+            setEditDialogOpen(open);
+            if (!open) limparForm();
+          }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Montador</DialogTitle>
+                <DialogDescription>
+                  Atualize os dados do montador
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-nome">Nome *</Label>
+                  <Input
+                    id="edit-nome"
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
+                    placeholder="Nome do montador"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-identificador">Identificador *</Label>
+                  <Input
+                    id="edit-identificador"
+                    value={formIdentificador}
+                    onChange={(e) => setFormIdentificador(e.target.value)}
+                    placeholder="ID único do montador"
+                    disabled
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O identificador não pode ser alterado
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-email">E-mail Principal *</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="contato@montador.com"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-emails-adicionais">E-mails Adicionais</Label>
+                  <Input
+                    id="edit-emails-adicionais"
+                    value={formEmailsAdicionais}
+                    onChange={(e) => setFormEmailsAdicionais(e.target.value)}
+                    placeholder="email2@montador.com, email3@montador.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Separe múltiplos emails por vírgula
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-fornecedor">Número do Fornecedor *</Label>
+                  <Input
+                    id="edit-fornecedor"
+                    value={formFornecedorId}
+                    onChange={(e) => setFormFornecedorId(e.target.value)}
+                    placeholder="FOR123"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-comissao">% Comissão</Label>
+                    <Input
+                      id="edit-comissao"
+                      type="number"
+                      step="0.1"
+                      value={formPercentualComissao}
+                      onChange={(e) => setFormPercentualComissao(e.target.value)}
+                      placeholder="5"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-auxilio">Auxílio Semanal (R$)</Label>
+                    <Input
+                      id="edit-auxilio"
+                      type="number"
+                      step="0.01"
+                      value={formAuxilioSemanal}
+                      onChange={(e) => setFormAuxilioSemanal(e.target.value)}
+                      placeholder="100"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-regra">Regra de Envio</Label>
+                    <Select value={formRegraEnvio} onValueChange={setFormRegraEnvio}>
+                      <SelectTrigger id="edit-regra">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Nenhuma">Nenhuma</SelectItem>
+                        <SelectItem value="Semanal">Semanal</SelectItem>
+                        <SelectItem value="Mensal (Dia Fixo)">Mensal (Dia Fixo)</SelectItem>
+                        <SelectItem value="Quinzenal">Quinzenal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-vencimento">Prazo Pagamento</Label>
+                    <Select value={formTempoVencimento} onValueChange={setFormTempoVencimento}>
+                      <SelectTrigger id="edit-vencimento">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 dias úteis</SelectItem>
+                        <SelectItem value="10">10 dias úteis</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {formRegraEnvio === "Semanal" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-dia-semana">Dia da Semana</Label>
+                    <Select value={formDiasEnvio} onValueChange={setFormDiasEnvio}>
+                      <SelectTrigger id="edit-dia-semana">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Segunda-feira">Segunda-feira</SelectItem>
+                        <SelectItem value="Terça-feira">Terça-feira</SelectItem>
+                        <SelectItem value="Quarta-feira">Quarta-feira</SelectItem>
+                        <SelectItem value="Quinta-feira">Quinta-feira</SelectItem>
+                        <SelectItem value="Sexta-feira">Sexta-feira</SelectItem>
+                        <SelectItem value="Sábado">Sábado</SelectItem>
+                        <SelectItem value="Domingo">Domingo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {(formRegraEnvio === "Mensal (Dia Fixo)" || formRegraEnvio === "Quinzenal") && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-dias-mes">Dias do Mês</Label>
+                    <Input
+                      id="edit-dias-mes"
+                      value={formDiasEnvio}
+                      onChange={(e) => setFormDiasEnvio(e.target.value)}
+                      placeholder="Ex: 5 ou 5,20"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Para quinzenal, separe dois dias por vírgula
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={editarMontador}>
+                  Salvar Alterações
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
         </TabsContent>

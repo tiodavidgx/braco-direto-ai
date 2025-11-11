@@ -122,3 +122,49 @@ def criar_montador(montador: MontadorCreate):
                 status_code=400,
                 detail="Identificador já existe"
             )
+
+@router.put("/{montador_id}")
+def atualizar_montador(montador_id: int, montador: MontadorUpdate):
+    """Atualiza um montador existente"""
+    with get_db_connection() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Verificar se existe
+        cur.execute("SELECT id FROM montadores WHERE id = %s", (montador_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Montador não encontrado")
+        
+        # Construir query de update dinamicamente
+        campos = []
+        valores = []
+        
+        for campo, valor in montador.dict(exclude_unset=True).items():
+            campos.append(f"{campo} = %s")
+            valores.append(valor)
+        
+        if not campos:
+            raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
+        
+        valores.append(montador_id)
+        query = f"UPDATE montadores SET {', '.join(campos)}, updated_at = NOW() WHERE id = %s RETURNING *"
+        
+        cur.execute(query, valores)
+        montador_atualizado = cur.fetchone()
+        
+        return montador_atualizado
+
+@router.delete("/{montador_id}", status_code=204)
+def deletar_montador(montador_id: int):
+    """Remove um montador"""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        
+        # Verificar se existe
+        cur.execute("SELECT id FROM montadores WHERE id = %s", (montador_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Montador não encontrado")
+        
+        # Deletar
+        cur.execute("DELETE FROM montadores WHERE id = %s", (montador_id,))
+        
+        return None
