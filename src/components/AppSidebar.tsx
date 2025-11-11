@@ -42,8 +42,8 @@ const menuItems = [
   {
     title: "Financeiro",
     items: [
+      { title: "Envio de Relatórios", url: "/envio-relatorios", icon: FileText },
       { title: "Pagamentos Vencidos", url: "/pagamentos-vencidos", icon: DollarSign },
-      { title: "Relatórios", url: "/relatorios", icon: FileText },
       { title: "Upload de NFs", url: "/upload-nf", icon: Upload },
     ],
   },

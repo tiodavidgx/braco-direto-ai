@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import Dashboard from "./pages/Dashboard";
 import Prestadores from "./pages/Prestadores";
 import Montadores from "./pages/Montadores";
+import EnvioRelatorios from "./pages/EnvioRelatorios";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/prestadores" element={<Prestadores />} />
                   <Route path="/montadores" element={<Montadores />} />
+                  <Route path="/envio-relatorios" element={<EnvioRelatorios />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
