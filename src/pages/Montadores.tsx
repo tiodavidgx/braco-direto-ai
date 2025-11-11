@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/table";
 import { Search, Plus, Mail, Phone, Percent, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { montadoresService } from "@/services/montadores.service";
+import { Montador } from "@/types/montador";
 
 interface BlacklistItem {
   id: number;
@@ -35,6 +37,8 @@ export default function Montadores() {
   const [motivo, setMotivo] = useState("");
   const [searchBlacklist, setSearchBlacklist] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [montadores, setMontadores] = useState<Montador[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Form states
   const [formNome, setFormNome] = useState("");
@@ -48,47 +52,27 @@ export default function Montadores() {
   const [formDiasEnvio, setFormDiasEnvio] = useState("");
   const [formTempoVencimento, setFormTempoVencimento] = useState("10");
 
-  // Mock data
-  const montadores = [
-    {
-      id: 1,
-      nome: "João Silva",
-      identificador: "MONT001",
-      email: "joao.silva@email.com",
-      telefone: "(11) 98765-1111",
-      percentualComissao: 5.5,
-      auxilioSemanal: 150.0,
-      ativo: true,
-    },
-    {
-      id: 2,
-      nome: "Maria Santos",
-      identificador: "MONT002",
-      email: "maria.santos@email.com",
-      telefone: "(11) 98765-2222",
-      percentualComissao: 6.0,
-      auxilioSemanal: 150.0,
-      ativo: true,
-    },
-    {
-      id: 3,
-      nome: "Carlos Oliveira",
-      identificador: "MONT003",
-      email: "carlos.oliveira@email.com",
-      telefone: "(11) 98765-3333",
-      percentualComissao: 5.0,
-      auxilioSemanal: 100.0,
-      ativo: false,
-    },
-  ];
+  useEffect(() => {
+    carregarBlacklist();
+    carregarMontadores();
+  }, []);
+
+  const carregarMontadores = async () => {
+    try {
+      setLoading(true);
+      const response = await montadoresService.getAll({ limit: 1000 });
+      setMontadores(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar montadores:", error);
+      toast.error("Erro ao carregar montadores");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredMontadores = montadores.filter((m) =>
     m.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  useEffect(() => {
-    carregarBlacklist();
-  }, []);
 
   const carregarBlacklist = async () => {
     try {
@@ -200,7 +184,8 @@ export default function Montadores() {
         setFormRegraEnvio("Nenhuma");
         setFormDiasEnvio("");
         setFormTempoVencimento("10");
-        // Recarregar lista (adicionar depois quando conectar API real)
+        // Recarregar lista
+        carregarMontadores();
       } else {
         const error = await response.json();
         toast.error(error.detail || "Erro ao adicionar montador");
@@ -455,12 +440,12 @@ export default function Montadores() {
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Percent className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium">{montador.percentualComissao}%</span>
+                      <span className="font-medium">{(montador.percentual_comissao * 100).toFixed(1)}%</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <span className="font-medium">
-                      R$ {montador.auxilioSemanal.toFixed(2)}
+                      R$ {montador.auxilio_semanal.toFixed(2)}
                     </span>
                   </TableCell>
                   <TableCell>

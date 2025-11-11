@@ -15,6 +15,7 @@ export interface Prestador {
   dias_envio?: string;
   tempo_vencimento_dias: number;
   emails_adicionais?: string;
+  ativo?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/table";
 import { Search, Plus, Mail, Phone, Calendar, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { prestadoresService } from "@/services/prestadores.service";
+import { Prestador } from "@/types/prestador";
 
 interface BlacklistItem {
   id: number;
@@ -35,6 +37,8 @@ export default function Prestadores() {
   const [motivo, setMotivo] = useState("");
   const [searchBlacklist, setSearchBlacklist] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [prestadores, setPrestadores] = useState<Prestador[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Form states
   const [formNome, setFormNome] = useState("");
@@ -45,50 +49,27 @@ export default function Prestadores() {
   const [formDiasEnvio, setFormDiasEnvio] = useState("");
   const [formTempoVencimento, setFormTempoVencimento] = useState("10");
 
-  // Mock data - será substituído por dados reais da API
-  const prestadores = [
-    {
-      id: 1,
-      nome: "Prestadora ABC Ltda",
-      email: "contato@abc.com",
-      fornecedorId: "FOR123",
-      telefone: "(11) 98765-4321",
-      regraEnvio: "Semanal",
-      diasEnvio: "Segunda-feira",
-      tempoVencimento: 10,
-      status: "ativo",
-    },
-    {
-      id: 2,
-      nome: "Serviços XYZ",
-      email: "admin@xyz.com.br",
-      fornecedorId: "FOR456",
-      telefone: "(11) 91234-5678",
-      regraEnvio: "Quinzenal",
-      diasEnvio: "1, 15",
-      tempoVencimento: 15,
-      status: "ativo",
-    },
-    {
-      id: 3,
-      nome: "Prestadora 123",
-      email: "contato@123.com",
-      fornecedorId: "FOR789",
-      telefone: "(11) 99999-8888",
-      regraEnvio: "Mensal (Dia Fixo)",
-      diasEnvio: "5",
-      tempoVencimento: 10,
-      status: "pendente",
-    },
-  ];
+  useEffect(() => {
+    carregarBlacklist();
+    carregarPrestadores();
+  }, []);
+
+  const carregarPrestadores = async () => {
+    try {
+      setLoading(true);
+      const response = await prestadoresService.getAll({ limit: 1000 });
+      setPrestadores(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar prestadores:", error);
+      toast.error("Erro ao carregar prestadores");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredPrestadores = prestadores.filter((p) =>
     p.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  useEffect(() => {
-    carregarBlacklist();
-  }, []);
 
   const carregarBlacklist = async () => {
     try {
@@ -194,7 +175,8 @@ export default function Prestadores() {
         setFormRegraEnvio("Nenhuma");
         setFormDiasEnvio("");
         setFormTempoVencimento("10");
-        // Recarregar lista (adicionar depois quando conectar API real)
+        // Recarregar lista
+        carregarPrestadores();
       } else {
         const error = await response.json();
         toast.error(error.detail || "Erro ao adicionar prestador");
@@ -403,27 +385,27 @@ export default function Prestadores() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{prestador.fornecedorId}</Badge>
+                    <Badge variant="outline">{prestador.fornecedor_id}</Badge>
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-sm">
                         <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-medium">{prestador.regraEnvio}</span>
+                        <span className="font-medium">{prestador.regra_envio || "Nenhuma"}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{prestador.diasEnvio}</span>
+                      {prestador.dias_envio && <span className="text-xs text-muted-foreground">{prestador.dias_envio}</span>}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={prestador.status === "ativo" ? "default" : "secondary"}
+                      variant={(prestador.ativo ?? true) ? "default" : "secondary"}
                       className={
-                        prestador.status === "ativo"
+                        (prestador.ativo ?? true)
                           ? "bg-success text-success-foreground"
                           : ""
                       }
                     >
-                      {prestador.status}
+                      {(prestador.ativo ?? true) ? "Ativo" : "Inativo"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

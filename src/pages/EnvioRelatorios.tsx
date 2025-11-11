@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ import {
 import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
+import { prestadoresService } from "@/services/prestadores.service";
+import { montadoresService } from "@/services/montadores.service";
+import { Prestador } from "@/types/prestador";
+import { Montador } from "@/types/montador";
 
 // Interfaces baseadas no streamlit original
 interface PrestadorEntry {
@@ -60,6 +64,11 @@ export default function EnvioRelatorios() {
   const [dataParaEnvio, setDataParaEnvio] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const [enviarWhatsApp, setEnviarWhatsApp] = useState(true);
+  
+  // Dados do banco
+  const [prestadores, setPrestadores] = useState<Prestador[]>([]);
+  const [montadores, setMontadores] = useState<Montador[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Form Manual - Prestador
   const [formPrestador, setFormPrestador] = useState({
@@ -110,13 +119,28 @@ Segue em anexo o seu relatório de pagamento de montagens referente ao período 
 Qualquer dúvida, estamos à disposição.`,
   });
 
-  // Lista de prestadores/montadores (mock - substituir com dados reais da API)
-  const prestadores = ["Prestadora ABC Ltda", "Serviços XYZ", "Prestadora 123"];
-  const montadores = [
-    { nome: "João Silva", identificador: "MONT001" },
-    { nome: "Maria Santos", identificador: "MONT002" },
-    { nome: "Carlos Oliveira", identificador: "MONT003" },
-  ];
+  // Carregar prestadores e montadores do banco
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [prestadoresData, montadoresData] = await Promise.all([
+          prestadoresService.getAll({ limit: 1000 }),
+          montadoresService.getAll({ ativo: true, limit: 1000 })
+        ]);
+        
+        setPrestadores(prestadoresData.data || []);
+        setMontadores(montadoresData.data || []);
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+        toast.error("Erro ao carregar prestadores e montadores");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   // PRESTADOR: Adicionar entrada manual
   const adicionarEntradaPrestador = () => {
@@ -374,13 +398,14 @@ Qualquer dúvida, estamos à disposição.`,
                     <Select
                       value={formPrestador.nome_prestador}
                       onValueChange={(v) => setFormPrestador({ ...formPrestador, nome_prestador: v })}
+                      disabled={loading}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder={loading ? "Carregando..." : "Selecione..."} />
                       </SelectTrigger>
                       <SelectContent>
                         {prestadores.map((p) => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                          <SelectItem key={p.id} value={p.nome}>{p.nome}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -509,13 +534,14 @@ Qualquer dúvida, estamos à disposição.`,
                           identificador: montador?.identificador || ""
                         });
                       }}
+                      disabled={loading}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder={loading ? "Carregando..." : "Selecione..."} />
                       </SelectTrigger>
                       <SelectContent>
                         {montadores.map((m) => (
-                          <SelectItem key={m.identificador} value={m.nome}>{m.nome}</SelectItem>
+                          <SelectItem key={m.id} value={m.nome}>{m.nome}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
