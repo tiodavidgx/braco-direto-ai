@@ -40,10 +40,15 @@ const menuItems = [
     ],
   },
   {
-    title: "Financeiro",
+    title: "Relatórios",
     items: [
       { title: "Envio de Relatórios", url: "/envio-relatorios", icon: FileText },
       { title: "Histórico de Envios", url: "/historico-envios", icon: Clock },
+    ],
+  },
+  {
+    title: "Financeiro",
+    items: [
       { title: "Pagamentos Vencidos", url: "/pagamentos-vencidos", icon: DollarSign },
       { title: "Upload de NFs", url: "/upload-nf", icon: Upload },
     ],

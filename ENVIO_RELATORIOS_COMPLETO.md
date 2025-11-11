@@ -10,6 +10,28 @@ Sistema completo para envio de relatórios de prestadores e montadores com:
 - ✅ **Notificação WhatsApp** - Mensagem automática
 - ✅ **Histórico Completo** - Por prestador/montador
 
+## 📂 Estrutura do Módulo
+
+**IMPORTANTE**: O módulo de Relatórios é independente e possui sua própria seção no menu lateral:
+
+### Menu Lateral (AppSidebar)
+```
+├── Principal
+│   ├── Dashboard
+│   ├── Prestadores
+│   └── Montadores
+├── Relatórios ← MÓDULO PRÓPRIO
+│   ├── Envio de Relatórios
+│   └── Histórico de Envios
+├── Financeiro
+│   ├── Pagamentos Vencidos
+│   └── Upload de NFs
+├── Comunicação
+└── Sistema
+```
+
+**Motivo da Separação**: O módulo de relatórios é o coração do sistema, responsável por toda comunicação com prestadores e montadores. Por ser tão crítico, merece sua própria seção independente, separada do financeiro.
+
 ---
 
 ## 📊 Frontend: Estrutura da Página
