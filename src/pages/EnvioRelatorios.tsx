@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,43 +22,187 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Mail, Upload, Send, Plus, Trash2, Edit2, MessageSquare, History } from "lucide-react";
+import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 
-interface ManualEntry {
-  os_numero?: string;
-  boletim?: string;
+// Interfaces baseadas no streamlit original
+interface PrestadorEntry {
+  nome_prestador: string;
+  periodo: string;
+  o_s: string;
   cliente: string;
-  localidade?: string;
-  modalidade?: string;
-  produto?: string;
+  localidade: string;
+  modalidade: string;
   data_execucao: string;
-  valor: number;
-  valor_extra?: number;
-  comissao?: number;
+  valor_custo_prestador: number;
+  valor_extra: number;
+  motivo_extra: string;
+  valor_total: number;
+}
+
+interface MontadorEntry {
+  identificador_do_montador: string;
+  nome_do_montador: string;
+  identificador_boletim_montagem: string;
+  data_da_montagem: string;
+  media_de_valor_venda: number;
+  nome_do_cliente: string;
+  nome_produto: string;
 }
 
 export default function EnvioRelatorios() {
+  // Estado principal
   const [tipoEnvio, setTipoEnvio] = useState<"prestador" | "montador">("prestador");
-  const [aba, setAba] = useState<"manual" | "excel" | "historico">("manual");
-  const [manualEntries, setManualEntries] = useState<ManualEntry[]>([]);
+  const [manualEntriesPrestador, setManualEntriesPrestador] = useState<PrestadorEntry[]>([]);
+  const [manualEntriesMontador, setManualEntriesMontador] = useState<MontadorEntry[]>([]);
   const [excelData, setExcelData] = useState<any[]>([]);
+  const [dataParaEnvio, setDataParaEnvio] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const [enviarWhatsApp, setEnviarWhatsApp] = useState(true);
+
+  // Form Manual - Prestador
+  const [formPrestador, setFormPrestador] = useState({
+    nome_prestador: "",
+    periodo: "",
+    o_s: "",
+    cliente: "",
+    localidade: "",
+    modalidade: "",
+    data_execucao: "",
+    valor: "0",
+    valor_extra: "0",
+    motivo_extra: "",
+  });
+
+  // Form Manual - Montador
+  const [formMontador, setFormMontador] = useState({
+    nome_montador: "",
+    identificador: "",
+    boletim: "",
+    data_montagem: "",
+    valor_venda: "0",
+    cliente: "",
+    produto: "",
+  });
 
   // Configurações de email
   const [emailConfig, setEmailConfig] = useState({
     cc: "projetos.qualidade@novomundo.com.br",
-    assunto: "Relatório de Fechamento - {{periodo}}",
-    corpo: `Segue em anexo o relatório de fechamento do período {{periodo}}.
+    assunto: tipoEnvio === "prestador"
+      ? "Novo Mundo Resolve | Nota Fiscal | Período: {{periodo}} | Prestador: {{nome_prestador}}"
+      : "Relatório de Pagamento de Montagem - Período: {{periodo_relatorio}}",
+    corpo: tipoEnvio === "prestador"
+      ? `Segue a relação de boletins para emissão da nota fiscal de serviços entre **{{periodo}}**.
 
-📎 Link para envio de Nota Fiscal: {{link_upload}}
+📎 Para anexar a Nota Fiscal, acesse o link abaixo:
+{{link_upload}}
 
-Atenciosamente,
-Novo Mundo`,
+⚠️ Este link é válido por 30 dias.
+
+Obrigado.`
+      : `Olá, {{nome_montador}},
+
+Segue em anexo o seu relatório de pagamento de montagens referente ao período de **{{periodo_relatorio}}**.
+
+📎 **Link para upload de documentos:** {{link_upload}}
+
+Qualquer dúvida, estamos à disposição.`,
   });
 
+  // Lista de prestadores/montadores (mock - substituir com dados reais da API)
+  const prestadores = ["Prestadora ABC Ltda", "Serviços XYZ", "Prestadora 123"];
+  const montadores = [
+    { nome: "João Silva", identificador: "MONT001" },
+    { nome: "Maria Santos", identificador: "MONT002" },
+    { nome: "Carlos Oliveira", identificador: "MONT003" },
+  ];
+
+  // PRESTADOR: Adicionar entrada manual
+  const adicionarEntradaPrestador = () => {
+    if (!formPrestador.nome_prestador || !formPrestador.periodo || !formPrestador.o_s || !formPrestador.data_execucao) {
+      toast.error("Preencha os campos obrigatórios: Prestador, Período, O.S. e Data");
+      return;
+    }
+
+    const valor = parseFloat(formPrestador.valor) || 0;
+    const valorExtra = parseFloat(formPrestador.valor_extra) || 0;
+
+    const novaEntrada: PrestadorEntry = {
+      nome_prestador: formPrestador.nome_prestador,
+      periodo: formPrestador.periodo,
+      o_s: formPrestador.o_s,
+      cliente: formPrestador.cliente,
+      localidade: formPrestador.localidade,
+      modalidade: formPrestador.modalidade,
+      data_execucao: formPrestador.data_execucao,
+      valor_custo_prestador: valor,
+      valor_extra: valorExtra,
+      motivo_extra: formPrestador.motivo_extra,
+      valor_total: valor + valorExtra,
+    };
+
+    setManualEntriesPrestador([...manualEntriesPrestador, novaEntrada]);
+    setDataParaEnvio([...manualEntriesPrestador, novaEntrada]);
+    
+    // Limpar form
+    setFormPrestador({
+      nome_prestador: formPrestador.nome_prestador, // Manter o prestador selecionado
+      periodo: formPrestador.periodo, // Manter o período
+      o_s: "",
+      cliente: "",
+      localidade: "",
+      modalidade: "",
+      data_execucao: "",
+      valor: "0",
+      valor_extra: "0",
+      motivo_extra: "",
+    });
+
+    toast.success("Entrada adicionada à lista");
+  };
+
+  // MONTADOR: Adicionar entrada manual
+  const adicionarEntradaMontador = () => {
+    if (!formMontador.nome_montador || !formMontador.boletim || !formMontador.data_montagem || !formMontador.valor_venda) {
+      toast.error("Preencha os campos obrigatórios: Montador, Boletim, Data e Valor");
+      return;
+    }
+
+    const montadorSelecionado = montadores.find(m => m.nome === formMontador.nome_montador);
+    if (!montadorSelecionado) {
+      toast.error("Montador não encontrado");
+      return;
+    }
+
+    const novaEntrada: MontadorEntry = {
+      identificador_do_montador: montadorSelecionado.identificador,
+      nome_do_montador: formMontador.nome_montador,
+      identificador_boletim_montagem: formMontador.boletim,
+      data_da_montagem: formMontador.data_montagem,
+      media_de_valor_venda: parseFloat(formMontador.valor_venda) || 0,
+      nome_do_cliente: formMontador.cliente,
+      nome_produto: formMontador.produto,
+    };
+
+    setManualEntriesMontador([...manualEntriesMontador, novaEntrada]);
+    setDataParaEnvio([...manualEntriesMontador, novaEntrada]);
+
+    // Limpar form (mantendo montador e data)
+    setFormMontador({
+      nome_montador: formMontador.nome_montador,
+      identificador: formMontador.identificador,
+      boletim: "",
+      data_montagem: formMontador.data_montagem,
+      valor_venda: "0",
+      cliente: "",
+      produto: "",
+    });
+
+    toast.success("Entrada adicionada à lista");
+  };
+
+  // Upload de Excel
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -74,24 +218,58 @@ Novo Mundo`,
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        // Normalizar nomes das colunas
+        // Normalizar nomes das colunas (remover espaços, acentos, caracteres especiais)
         const normalizedData = jsonData.map((row: any) => {
           const normalized: any = {};
           Object.keys(row).forEach(key => {
             const normalizedKey = key
               .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
               .replace(/\s+/g, '_')
-              .replace(/[^\w]/g, '');
+              .replace(/[^\w]/g, '_');
             normalized[normalizedKey] = row[key];
           });
-          
-          // Verificar status (se já foi enviado antes)
-          normalized.status = "Pendente"; // TODO: verificar no backend
-          
           return normalized;
         });
 
+        // Validar colunas obrigatórias
+        if (tipoEnvio === "prestador") {
+          const required = ["nome_prestador", "periodo", "data_execucao", "o_s"];
+          const hasAllColumns = required.every(col =>
+            normalizedData.length > 0 && normalizedData[0].hasOwnProperty(col)
+          );
+
+          if (!hasAllColumns) {
+            toast.error(`Excel precisa das colunas: ${required.join(", ")}`);
+            return;
+          }
+
+          // Converter valores numéricos
+          normalizedData.forEach(row => {
+            row.valor_custo_prestador = parseFloat(row.valor_custo_prestador || 0);
+            row.valor_extra = parseFloat(row.valor_extra || 0);
+            row.valor_total = row.valor_custo_prestador + row.valor_extra;
+          });
+        } else {
+          const required = ["identificador_do_montador", "identificador_boletim_montagem", "data_da_montagem", "media_de_valor_venda", "nome_produto"];
+          const hasAllColumns = required.every(col =>
+            normalizedData.length > 0 && normalizedData[0].hasOwnProperty(col)
+          );
+
+          if (!hasAllColumns) {
+            toast.error(`Excel precisa das colunas: ${required.join(", ")}`);
+            return;
+          }
+
+          // Converter valores numéricos
+          normalizedData.forEach(row => {
+            row.media_de_valor_venda = parseFloat(row.media_de_valor_venda || 0);
+          });
+        }
+
         setExcelData(normalizedData);
+        setDataParaEnvio(normalizedData);
         toast.success(`${normalizedData.length} linhas carregadas com sucesso!`);
       } catch (error) {
         toast.error("Erro ao processar planilha");
@@ -102,69 +280,52 @@ Novo Mundo`,
     reader.readAsArrayBuffer(file);
   };
 
-  const adicionarEntradaManual = () => {
-    const novaEntrada: ManualEntry = {
-      os_numero: "",
-      cliente: "",
-      data_execucao: new Date().toISOString().split('T')[0],
-      valor: 0,
-    };
-    setManualEntries([...manualEntries, novaEntrada]);
-  };
+  // Enviar relatórios
+  const enviarRelatorios = async () => {
+    if (dataParaEnvio.length === 0) {
+      toast.error("Nenhum dado para enviar");
+      return;
+    }
 
-  const removerEntrada = (index: number) => {
-    const novasEntradas = manualEntries.filter((_, i) => i !== index);
-    setManualEntries(novasEntradas);
-  };
-
-  const atualizarEntrada = (index: number, campo: string, valor: any) => {
-    const novasEntradas = [...manualEntries];
-    novasEntradas[index] = {
-      ...novasEntradas[index],
-      [campo]: valor,
-    };
-    setManualEntries(novasEntradas);
-  };
-
-  const handleEnviarRelatorios = async () => {
     setSending(true);
-    try {
-      const dadosParaEnviar = aba === "manual" ? manualEntries : excelData.filter(d => d.status === "Pendente");
-      
-      if (dadosParaEnviar.length === 0) {
-        toast.warning("Nenhum item para enviar");
-        return;
-      }
+    toast.info("Enviando relatórios...");
 
-      // Chamar API para gerar PDFs e enviar emails
-      const response = await fetch(`/api/v1/relatorios/enviar-lote`, {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/relatorios/enviar-lote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipo: tipoEnvio,
-          dados: dadosParaEnviar,
+          dados: dataParaEnvio,
           emailConfig,
           enviarWhatsApp,
         }),
       });
 
       if (response.ok) {
-        toast.success(`${dadosParaEnviar.length} relatório(s) enviado(s) com sucesso!`);
-        setManualEntries([]);
+        const result = await response.json();
+        toast.success(`${result.sucesso} relatórios enviados com sucesso!`);
+        
+        if (result.warning) {
+          toast.warning(result.warning);
+        }
+
+        // Limpar dados
+        setManualEntriesPrestador([]);
+        setManualEntriesMontador([]);
         setExcelData([]);
+        setDataParaEnvio([]);
       } else {
-        toast.error("Erro ao enviar relatórios");
+        const error = await response.json();
+        toast.error(error.detail || "Erro ao enviar relatórios");
       }
     } catch (error) {
-      toast.error("Erro ao processar envio");
+      toast.error("Erro ao enviar relatórios");
+      console.error(error);
     } finally {
       setSending(false);
     }
   };
-
-  const valorTotal = aba === "manual" 
-    ? manualEntries.reduce((sum, e) => sum + (e.valor + (e.valor_extra || 0)), 0)
-    : excelData.filter(d => d.status === "Pendente").reduce((sum, e) => sum + e.valor, 0);
 
   return (
     <div className="space-y-6">
@@ -172,334 +333,474 @@ Novo Mundo`,
         <div>
           <h1 className="text-3xl font-bold text-foreground">Envio de Relatórios</h1>
           <p className="text-muted-foreground">
-            Importar planilha ou lançar manualmente para envio de relatórios
+            Enviar relatórios de fechamento para prestadores e montadores
           </p>
         </div>
-        <Select value={tipoEnvio} onValueChange={(v: any) => setTipoEnvio(v)}>
+
+        <Select value={tipoEnvio} onValueChange={(v: "prestador" | "montador") => {
+          setTipoEnvio(v);
+          setManualEntriesPrestador([]);
+          setManualEntriesMontador([]);
+          setExcelData([]);
+          setDataParaEnvio([]);
+        }}>
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="prestador">🔧 Prestadores</SelectItem>
-            <SelectItem value="montador">🔨 Montadores</SelectItem>
+            <SelectItem value="prestador">🏢 Prestadores</SelectItem>
+            <SelectItem value="montador">👷 Montadores</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <Tabs value={aba} onValueChange={(v: any) => setAba(v)}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="manual" className="gap-2">
-            <Edit2 className="h-4 w-4" />
-            Lançamento Manual
-          </TabsTrigger>
-          <TabsTrigger value="excel" className="gap-2">
-            <Upload className="h-4 w-4" />
-            Importar Excel
-          </TabsTrigger>
-          <TabsTrigger value="historico" className="gap-2">
-            <History className="h-4 w-4" />
-            Histórico
-          </TabsTrigger>
+      <Tabs defaultValue="manual" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="manual">Lançamento Manual</TabsTrigger>
+          <TabsTrigger value="excel">Importar Excel</TabsTrigger>
         </TabsList>
 
-        {/* LANÇAMENTO MANUAL */}
         <TabsContent value="manual" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Adicionar {tipoEnvio === "prestador" ? "OS" : "Montagens"}</CardTitle>
-                <Button onClick={adicionarEntradaManual} variant="outline" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Adicionar Linha
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {manualEntries.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <p>Nenhum item adicionado ainda</p>
-                  <p className="text-sm">Clique em "Adicionar Linha" para começar</p>
+          {tipoEnvio === "prestador" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Adicionar Boletim Manualmente</CardTitle>
+                <CardDescription>Preencha os dados do serviço prestado</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Prestador *</Label>
+                    <Select
+                      value={formPrestador.nome_prestador}
+                      onValueChange={(v) => setFormPrestador({ ...formPrestador, nome_prestador: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {prestadores.map((p) => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Período *</Label>
+                    <Input
+                      placeholder="01/11 - 07/11"
+                      value={formPrestador.periodo}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, periodo: e.target.value })}
+                    />
+                  </div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>O.S *</Label>
+                    <Input
+                      placeholder="OS001"
+                      value={formPrestador.o_s}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, o_s: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Cliente</Label>
+                    <Input
+                      placeholder="Nome do cliente"
+                      value={formPrestador.cliente}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, cliente: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Data de Execução *</Label>
+                    <Input
+                      type="date"
+                      value={formPrestador.data_execucao}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, data_execucao: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Localidade</Label>
+                    <Input
+                      placeholder="São Paulo"
+                      value={formPrestador.localidade}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, localidade: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Modalidade</Label>
+                    <Input
+                      placeholder="Instalação"
+                      value={formPrestador.modalidade}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, modalidade: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Valor (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formPrestador.valor}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, valor: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Valor Extra (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formPrestador.valor_extra}
+                      onChange={(e) => setFormPrestador({ ...formPrestador, valor_extra: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Valor Total</Label>
+                    <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm font-bold">
+                      R$ {(parseFloat(formPrestador.valor) + parseFloat(formPrestador.valor_extra)).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Motivo Valor Extra</Label>
+                  <Input
+                    placeholder="Hora extra, deslocamento..."
+                    value={formPrestador.motivo_extra}
+                    onChange={(e) => setFormPrestador({ ...formPrestador, motivo_extra: e.target.value })}
+                  />
+                </div>
+
+                <Button onClick={adicionarEntradaPrestador} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar à Lista
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Adicionar Montagem Manualmente</CardTitle>
+                <CardDescription>Preencha os dados da montagem realizada</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Montador *</Label>
+                    <Select
+                      value={formMontador.nome_montador}
+                      onValueChange={(v) => {
+                        const montador = montadores.find(m => m.nome === v);
+                        setFormMontador({
+                          ...formMontador,
+                          nome_montador: v,
+                          identificador: montador?.identificador || ""
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {montadores.map((m) => (
+                          <SelectItem key={m.identificador} value={m.nome}>{m.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Data da Montagem *</Label>
+                    <Input
+                      type="date"
+                      value={formMontador.data_montagem}
+                      onChange={(e) => setFormMontador({ ...formMontador, data_montagem: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Boletim Montagem *</Label>
+                    <Input
+                      placeholder="BOL001"
+                      value={formMontador.boletim}
+                      onChange={(e) => setFormMontador({ ...formMontador, boletim: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Média de Valor Venda (R$) *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formMontador.valor_venda}
+                      onChange={(e) => setFormMontador({ ...formMontador, valor_venda: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Cliente</Label>
+                    <Input
+                      placeholder="Nome do cliente"
+                      value={formMontador.cliente}
+                      onChange={(e) => setFormMontador({ ...formMontador, cliente: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Nome do Produto *</Label>
+                    <Input
+                      placeholder="Cama Box, Guarda-Roupa..."
+                      value={formMontador.produto}
+                      onChange={(e) => setFormMontador({ ...formMontador, produto: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <Button onClick={adicionarEntradaMontador} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar à Lista
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Preview da lista manual */}
+          {((tipoEnvio === "prestador" && manualEntriesPrestador.length > 0) ||
+            (tipoEnvio === "montador" && manualEntriesMontador.length > 0)) && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Lista para Envio</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setManualEntriesPrestador([]);
+                      setManualEntriesMontador([]);
+                      setDataParaEnvio([]);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Limpar Lista
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>{tipoEnvio === "prestador" ? "OS" : "Boletim"}</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        {tipoEnvio === "prestador" && <TableHead>Localidade</TableHead>}
-                        {tipoEnvio === "prestador" && <TableHead>Modalidade</TableHead>}
-                        {tipoEnvio === "montador" && <TableHead>Produto</TableHead>}
-                        <TableHead>Data</TableHead>
-                        <TableHead>Valor (R$)</TableHead>
-                        {tipoEnvio === "prestador" && <TableHead>Extra (R$)</TableHead>}
-                        <TableHead>Total (R$)</TableHead>
-                        <TableHead className="w-16"></TableHead>
+                        {tipoEnvio === "prestador" ? (
+                          <>
+                            <TableHead>Prestador</TableHead>
+                            <TableHead>Período</TableHead>
+                            <TableHead>O.S.</TableHead>
+                            <TableHead>Cliente</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Valor Total</TableHead>
+                          </>
+                        ) : (
+                          <>
+                            <TableHead>Montador</TableHead>
+                            <TableHead>Boletim</TableHead>
+                            <TableHead>Produto</TableHead>
+                            <TableHead>Cliente</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                          </>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {manualEntries.map((entry, index) => (
-                        <TableRow key={index}>
-                          <TableCell>
-                            <Input
-                              value={tipoEnvio === "prestador" ? entry.os_numero : entry.boletim}
-                              onChange={(e) => atualizarEntrada(index, tipoEnvio === "prestador" ? "os_numero" : "boletim", e.target.value)}
-                              placeholder={tipoEnvio === "prestador" ? "OS001" : "BOL001"}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={entry.cliente}
-                              onChange={(e) => atualizarEntrada(index, "cliente", e.target.value)}
-                              placeholder="Nome do cliente"
-                            />
-                          </TableCell>
-                          {tipoEnvio === "prestador" && (
-                            <TableCell>
-                              <Input
-                                value={entry.localidade}
-                                onChange={(e) => atualizarEntrada(index, "localidade", e.target.value)}
-                                placeholder="Cidade"
-                              />
-                            </TableCell>
-                          )}
-                          {tipoEnvio === "prestador" && (
-                            <TableCell>
-                              <Input
-                                value={entry.modalidade}
-                                onChange={(e) => atualizarEntrada(index, "modalidade", e.target.value)}
-                                placeholder="Instalação"
-                              />
-                            </TableCell>
-                          )}
-                          {tipoEnvio === "montador" && (
-                            <TableCell>
-                              <Input
-                                value={entry.produto}
-                                onChange={(e) => atualizarEntrada(index, "produto", e.target.value)}
-                                placeholder="Produto"
-                              />
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <Input
-                              type="date"
-                              value={entry.data_execucao}
-                              onChange={(e) => atualizarEntrada(index, "data_execucao", e.target.value)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={entry.valor}
-                              onChange={(e) => atualizarEntrada(index, "valor", parseFloat(e.target.value) || 0)}
-                            />
-                          </TableCell>
-                          {tipoEnvio === "prestador" && (
-                            <TableCell>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={entry.valor_extra || 0}
-                                onChange={(e) => atualizarEntrada(index, "valor_extra", parseFloat(e.target.value) || 0)}
-                              />
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <span className="font-semibold">
-                              {(entry.valor + (entry.valor_extra || 0)).toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removerEntrada(index)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {tipoEnvio === "prestador"
+                        ? manualEntriesPrestador.map((entry, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>{entry.nome_prestador}</TableCell>
+                              <TableCell>{entry.periodo}</TableCell>
+                              <TableCell><Badge variant="outline">{entry.o_s}</Badge></TableCell>
+                              <TableCell>{entry.cliente || "-"}</TableCell>
+                              <TableCell>{entry.data_execucao}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                R$ {entry.valor_total.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        : manualEntriesMontador.map((entry, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>{entry.nome_do_montador}</TableCell>
+                              <TableCell><Badge variant="outline">{entry.identificador_boletim_montagem}</Badge></TableCell>
+                              <TableCell>{entry.nome_produto}</TableCell>
+                              <TableCell>{entry.nome_do_cliente || "-"}</TableCell>
+                              <TableCell>{entry.data_da_montagem}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                R$ {entry.media_de_valor_venda.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                     </TableBody>
                   </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {manualEntries.length > 0 && (
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Valor Total</p>
-                    <p className="text-3xl font-bold text-primary">
-                      R$ {valorTotal.toFixed(2)}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {manualEntries.length} {tipoEnvio === "prestador" ? "OS" : "montagens"}
-                    </p>
-                  </div>
-                  <Button onClick={() => setManualEntries([])} variant="outline">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Limpar Tudo
-                  </Button>
                 </div>
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
-        {/* IMPORTAR EXCEL */}
         <TabsContent value="excel" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Importar Planilha Excel</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                Importar Planilha Excel
+              </CardTitle>
+              <CardDescription>
+                {tipoEnvio === "prestador"
+                  ? "Colunas obrigatórias: nome_prestador, periodo, data_execucao, o_s"
+                  : "Colunas obrigatórias: identificador_do_montador, identificador_boletim_montagem, data_da_montagem, media_de_valor_venda, nome_produto"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-center border-2 border-dashed border-border rounded-lg p-12">
-                  <Label htmlFor="file-upload" className="cursor-pointer">
-                    <div className="text-center">
-                      <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                      <p className="mt-4 text-sm font-medium">Clique para selecionar arquivo</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Formatos aceitos: .xlsx, .xls
-                      </p>
-                    </div>
-                    <Input
-                      id="file-upload"
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={handleFileUpload}
-                      className="sr-only"
-                    />
-                  </Label>
-                </div>
+              <div className="flex items-center justify-center w-full">
+                <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <Upload className="w-10 h-10 mb-3 text-muted-foreground" />
+                    <p className="mb-2 text-sm text-muted-foreground">
+                      <span className="font-semibold">Clique para fazer upload</span> ou arraste e solte
+                    </p>
+                    <p className="text-xs text-muted-foreground">Arquivos Excel (.xlsx)</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileUpload}
+                  />
+                </label>
+              </div>
+            </CardContent>
+          </Card>
 
-                {excelData.length > 0 && (
-                  <div>
-                    <h3 className="font-semibold mb-4">Pré-visualização</h3>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>OS/Boletim</TableHead>
+          {/* Preview do Excel */}
+          {excelData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Preview dos Dados Importados</CardTitle>
+                <CardDescription>{excelData.length} linhas carregadas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border max-h-96 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {tipoEnvio === "prestador" ? (
+                          <>
+                            <TableHead>Prestador</TableHead>
+                            <TableHead>Período</TableHead>
+                            <TableHead>O.S.</TableHead>
                             <TableHead>Cliente</TableHead>
-                            <TableHead>Valor</TableHead>
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {excelData.map((row, i) => (
-                            <TableRow key={i}>
-                              <TableCell>{row.os_numero}</TableCell>
-                              <TableCell>{row.cliente}</TableCell>
-                              <TableCell>R$ {row.valor.toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Badge variant={row.status === "Pendente" ? "default" : "secondary"}>
-                                  {row.status}
-                                </Badge>
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Valor Total</TableHead>
+                          </>
+                        ) : (
+                          <>
+                            <TableHead>Montador</TableHead>
+                            <TableHead>Boletim</TableHead>
+                            <TableHead>Produto</TableHead>
+                            <TableHead>Cliente</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {excelData.map((row, idx) => (
+                        <TableRow key={idx}>
+                          {tipoEnvio === "prestador" ? (
+                            <>
+                              <TableCell>{row.nome_prestador}</TableCell>
+                              <TableCell>{row.periodo}</TableCell>
+                              <TableCell><Badge variant="outline">{row.o_s}</Badge></TableCell>
+                              <TableCell>{row.cliente || "-"}</TableCell>
+                              <TableCell>{row.data_execucao}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                R$ {row.valor_total?.toFixed(2) || "0.00"}
                               </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* HISTÓRICO */}
-        <TabsContent value="historico" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Histórico de Envios</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Mock de histórico */}
-              <div className="space-y-4">
-                {[
-                  {
-                    id: 1,
-                    nome: "Prestadora ABC",
-                    periodo: "01/11 - 07/11",
-                    valor: 15480.5,
-                    data: "08/11/2025",
-                    status: "Aguardando NF",
-                  },
-                  {
-                    id: 2,
-                    nome: "João Silva",
-                    periodo: "Novembro/2025",
-                    valor: 3250.0,
-                    data: "05/11/2025",
-                    status: "Pago",
-                  },
-                ].map((item) => (
-                  <div key={item.id} className="rounded-lg border border-border p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="font-semibold">{item.nome}</p>
-                        <p className="text-sm text-muted-foreground">Período: {item.periodo}</p>
-                        <p className="text-sm text-muted-foreground">Enviado em: {item.data}</p>
-                      </div>
-                      <div className="text-right space-y-2">
-                        <p className="text-lg font-bold">R$ {item.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                        <Badge variant={item.status === "Pago" ? "default" : "secondary"}>
-                          {item.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell>{row.identificador_do_montador}</TableCell>
+                              <TableCell><Badge variant="outline">{row.identificador_boletim_montagem}</Badge></TableCell>
+                              <TableCell>{row.nome_produto}</TableCell>
+                              <TableCell>{row.nome_do_cliente || "-"}</TableCell>
+                              <TableCell>{row.data_da_montagem}</TableCell>
+                              <TableCell className="text-right font-medium">
+                                R$ {row.media_de_valor_venda?.toFixed(2) || "0.00"}
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
-      {/* CONFIGURAÇÕES E ENVIO */}
-      {(aba === "manual" && manualEntries.length > 0) || (aba === "excel" && excelData.length > 0) ? (
+      {/* Configurações de Envio */}
+      {dataParaEnvio.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>⚙️ Configurações de Envio</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Configurações de Email
+            </CardTitle>
+            <CardDescription>
+              Configure o assunto e corpo do email. Use variáveis como {`{{periodo}}`}, {`{{nome_prestador}}`}, {`{{valor_total}}`}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cc">CC (com vírgula)</Label>
+              <Label>CC (com cópia)</Label>
               <Input
-                id="cc"
+                placeholder="email1@empresa.com, email2@empresa.com"
                 value={emailConfig.cc}
                 onChange={(e) => setEmailConfig({ ...emailConfig, cc: e.target.value })}
-                placeholder="email1@empresa.com, email2@empresa.com"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="assunto">Assunto do Email</Label>
+              <Label>Assunto</Label>
               <Input
-                id="assunto"
                 value={emailConfig.assunto}
                 onChange={(e) => setEmailConfig({ ...emailConfig, assunto: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">
-                Variáveis: {`{{periodo}}, {{nome_prestador}}, {{valor_total}}`}
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="corpo">Corpo do Email</Label>
+              <Label>Corpo do Email</Label>
               <Textarea
-                id="corpo"
+                rows={8}
                 value={emailConfig.corpo}
                 onChange={(e) => setEmailConfig({ ...emailConfig, corpo: e.target.value })}
-                rows={6}
               />
             </div>
 
@@ -509,27 +810,27 @@ Novo Mundo`,
                 checked={enviarWhatsApp}
                 onCheckedChange={(checked) => setEnviarWhatsApp(checked as boolean)}
               />
-              <Label htmlFor="whatsapp" className="flex items-center gap-2 cursor-pointer">
+              <label
+                htmlFor="whatsapp"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+              >
                 <MessageSquare className="h-4 w-4" />
                 Enviar notificação por WhatsApp também
-              </Label>
+              </label>
             </div>
 
-            <div className="pt-4">
-              <Button onClick={handleEnviarRelatorios} disabled={sending} className="w-full gap-2" size="lg">
-                {sending ? (
-                  <>Enviando...</>
-                ) : (
-                  <>
-                    <Send className="h-5 w-5" />
-                    Enviar {manualEntries.length || excelData.filter(d => d.status === "Pendente").length} Relatório(s)
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              onClick={enviarRelatorios}
+              disabled={sending}
+              size="lg"
+              className="w-full"
+            >
+              <Send className="mr-2 h-5 w-5" />
+              {sending ? "Enviando..." : `Enviar ${dataParaEnvio.length} Relatório(s)`}
+            </Button>
           </CardContent>
         </Card>
-      ) : null}
+      )}
     </div>
   );
 }
