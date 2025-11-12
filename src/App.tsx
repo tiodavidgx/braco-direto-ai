@@ -14,6 +14,7 @@ import PagamentosVencidos from "./pages/PagamentosVencidos";
 import WhatsApp from "./pages/WhatsApp";
 import Automacao from "./pages/Automacao";
 import Integracoes from "./pages/Integracoes";
+import Jobs from "./pages/Jobs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
                   <Route path="/whatsapp" element={<WhatsApp />} />
                   <Route path="/automacao" element={<Automacao />} />
                   <Route path="/integracoes" element={<Integracoes />} />
+                  <Route path="/jobs" element={<Jobs />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
