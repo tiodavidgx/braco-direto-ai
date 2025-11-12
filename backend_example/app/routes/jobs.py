@@ -147,10 +147,9 @@ def reload_service():
 @router.get("/config")
 def get_jobs_config():
     """Lista configurações de todos os jobs"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
         cursor.execute("""
             SELECT 
                 id,
@@ -183,18 +182,14 @@ def get_jobs_config():
             })
         
         return jobs
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @router.put("/config/{job_name}")
 def update_job_config(job_name: str, update: JobUpdate):
     """Atualiza configuração de um job"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
         cursor.execute("""
             UPDATE jobs_config
             SET ativo = %s, intervalo_minutos = %s
@@ -204,14 +199,7 @@ def update_job_config(job_name: str, update: JobUpdate):
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Job não encontrado")
         
-        conn.commit()
         return {"message": "Configuração atualizada"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @router.get("/logs")

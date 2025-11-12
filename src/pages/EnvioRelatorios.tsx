@@ -142,6 +142,47 @@ Qualquer dúvida, estamos à disposição.`,
     loadData();
   }, []);
 
+  // Auto preencher com dados de teste
+  const autoPreencherPrestador = () => {
+    const hoje = new Date().toISOString().split('T')[0];
+    const osNumber = Math.floor(Math.random() * 9000) + 1000; // Gera número entre 1000-9999
+    
+    // Procurar prestador "david"
+    const prestadorDavid = prestadores.find(p => p.nome.toLowerCase() === "david");
+    
+    setFormPrestador({
+      nome_prestador: prestadorDavid ? prestadorDavid.nome : (prestadores.length > 0 ? prestadores[0].nome : ""),
+      periodo: "01",
+      o_s: `H${osNumber}`,
+      cliente: "Nome do cliente",
+      localidade: "São Paulo",
+      modalidade: "Instalação",
+      data_execucao: hoje,
+      valor: "150.00",
+      valor_extra: "0",
+      motivo_extra: "",
+    });
+    
+    toast.success("Formulário preenchido automaticamente!");
+  };
+
+  const autoPreencherMontador = () => {
+    const hoje = new Date().toISOString().split('T')[0];
+    const osNumber = Math.floor(Math.random() * 9000) + 1000;
+    
+    setFormMontador({
+      nome_montador: montadores.length > 0 ? montadores[0].nome : "",
+      identificador: montadores.length > 0 ? montadores[0].identificador : "",
+      boletim: `H${osNumber}`,
+      data_montagem: hoje,
+      valor_venda: "500.00",
+      cliente: "Nome do cliente",
+      produto: "Produto Teste",
+    });
+    
+    toast.success("Formulário preenchido automaticamente!");
+  };
+
   // PRESTADOR: Adicionar entrada manual
   const adicionarEntradaPrestador = () => {
     if (!formPrestador.nome_prestador || !formPrestador.periodo || !formPrestador.o_s || !formPrestador.data_execucao) {
@@ -315,7 +356,8 @@ Qualquer dúvida, estamos à disposição.`,
     toast.info("Enviando relatórios...");
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/relatorios/enviar-lote`, {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -328,10 +370,19 @@ Qualquer dúvida, estamos à disposição.`,
 
       if (response.ok) {
         const result = await response.json();
-        toast.success(`${result.sucesso} relatórios enviados com sucesso!`);
+        
+        if (result.message) {
+          toast.success(result.message);
+        } else {
+          toast.success(`✅ ${result.sucesso} relatórios processados com sucesso!`);
+        }
         
         if (result.warning) {
           toast.warning(result.warning);
+        }
+        
+        if (result.erros > 0 && result.detalhes_erros) {
+          console.error("Erros detalhados:", result.detalhes_erros);
         }
 
         // Limpar dados
@@ -340,12 +391,13 @@ Qualquer dúvida, estamos à disposição.`,
         setExcelData([]);
         setDataParaEnvio([]);
       } else {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
         toast.error(error.detail || "Erro ao enviar relatórios");
+        console.error("Erro da API:", error);
       }
-    } catch (error) {
-      toast.error("Erro ao enviar relatórios");
-      console.error(error);
+    } catch (error: any) {
+      toast.error(`Erro ao enviar relatórios: ${error.message || "Erro desconhecido"}`);
+      console.error("Erro completo:", error);
     } finally {
       setSending(false);
     }
@@ -388,8 +440,20 @@ Qualquer dúvida, estamos à disposição.`,
           {tipoEnvio === "prestador" ? (
             <Card>
               <CardHeader>
-                <CardTitle>Adicionar Boletim Manualmente</CardTitle>
-                <CardDescription>Preencha os dados do serviço prestado</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Adicionar Boletim Manualmente</CardTitle>
+                    <CardDescription>Preencha os dados do serviço prestado</CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={autoPreencherPrestador}
+                    disabled={prestadores.length === 0}
+                  >
+                    ✨ Auto Preencher
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -517,8 +581,20 @@ Qualquer dúvida, estamos à disposição.`,
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>Adicionar Montagem Manualmente</CardTitle>
-                <CardDescription>Preencha os dados da montagem realizada</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Adicionar Montagem Manualmente</CardTitle>
+                    <CardDescription>Preencha os dados da montagem realizada</CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={autoPreencherMontador}
+                    disabled={montadores.length === 0}
+                  >
+                    ✨ Auto Preencher
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">

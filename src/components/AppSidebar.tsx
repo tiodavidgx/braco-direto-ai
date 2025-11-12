@@ -63,6 +63,7 @@ const menuItems = [
   {
     title: "Sistema",
     items: [
+      { title: "Configurar Email", url: "/email-config", icon: Settings },
       { title: "Jobs Automáticos", url: "/jobs", icon: Clock },
       { title: "Integrações", url: "/integracoes", icon: Settings },
       { title: "Backups", url: "/backups", icon: Database },

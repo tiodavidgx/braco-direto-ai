@@ -35,12 +35,12 @@ class PrestadorUpdate(BaseModel):
     tempo_vencimento_dias: Optional[int] = None
     emails_adicionais: Optional[str] = None
 
-@router.get("/")
+@router.get("")
 def listar_prestadores(
     search: Optional[str] = None,
     ativo: Optional[bool] = None,
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100)
+    limit: int = Query(10, ge=1, le=1000)
 ):
     """
     Lista todos os prestadores com paginação e filtros.
@@ -96,7 +96,7 @@ def buscar_prestador(prestador_id: int):
         
         return prestador
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 def criar_prestador(prestador: PrestadorCreate):
     """Cria um novo prestador"""
     with get_db_connection() as conn:
@@ -155,7 +155,7 @@ def atualizar_prestador(prestador_id: int, prestador: PrestadorUpdate):
             raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
         
         valores.append(prestador_id)
-        query = f"UPDATE prestadores SET {', '.join(campos)}, updated_at = NOW() WHERE id = %s RETURNING *"
+        query = f"UPDATE prestadores SET {', '.join(campos)} WHERE id = %s RETURNING *"
         
         cur.execute(query, valores)
         prestador_atualizado = cur.fetchone()

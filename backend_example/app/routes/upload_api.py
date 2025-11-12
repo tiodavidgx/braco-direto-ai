@@ -1,0 +1,175 @@
+"""
+Rotas para integração com API de Upload de Notas Fiscais
+Gerenciamento de links de upload e consulta de status
+"""
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+router = APIRouter()
+
+# Configurações da API de Upload
+API_UPLOAD_URL = os.getenv("API_UPLOAD_URL", "http://api.link.dev.br/dvprocessamento/")
+API_UPLOAD_KEY = os.getenv("API_UPLOAD_KEY", "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6")
+
+class GerarLinkRequest(BaseModel):
+    nome: str
+    email: str
+    periodo: str  # Formato: MM/YYYY
+    valor_total: float
+    quantidade_os: int
+    lote_id: int
+    tipo: str  # 'lote' ou 'montagem'
+
+class ConsultarStatusRequest(BaseModel):
+    hash: str
+
+@router.post("/gerar-link")
+def gerar_link_upload(request: GerarLinkRequest):
+    """
+    Gera link de upload na API externa
+    
+    Retorna:
+        {
+            "success": true,
+            "id_controle": 1,
+            "lote_id": 99999,
+            "link": "https://api.link.com.br/dvprocessamento/envio-nf/...",
+            "hash": "03de0449e11849318f7d67e08377f150",
+            "validade_link": "2025-11-12",
+            "status": 0,
+            "message": "Registro criado com sucesso"
+        }
+    """
+    
+    try:
+        # Aplicar offset para montadores (evitar conflito de IDs)
+        lote_id_api = request.lote_id
+        if request.tipo == 'montagem':
+            lote_id_api = 876231 + request.lote_id
+        
+        # Preparar payload para API
+        payload = {
+            "nome": request.nome,
+            "email": request.email,
+            "periodo": request.periodo,
+            "valor_total": request.valor_total,
+            "quantidade_os": request.quantidade_os,
+            "data_envio": __import__("datetime").datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "lote_id": lote_id_api,
+            "tipo": request.tipo
+        }
+        
+        # Headers da requisição
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+            "User-Agent": "NovoMundo-DisparadorEmail/1.0",
+            "X-API-Key": API_UPLOAD_KEY
+        }
+        
+        print(f"\n📤 Enviando para API de Upload:")
+        print(f"   URL: {API_UPLOAD_URL}")
+        print(f"   Payload: {payload}")
+        
+        # Fazer requisição
+        response = requests.post(
+            API_UPLOAD_URL,
+            json=payload,
+            headers=headers,
+            timeout=30,
+            verify=False  # SSL ainda não está ativo
+        )
+        
+        print(f"   Status: {response.status_code}")
+        print(f"   Resposta: {response.text}")
+        
+        # Verificar resposta
+        if response.status_code in [200, 201]:
+            resposta_json = response.json()
+            
+            if resposta_json.get('success'):
+                return resposta_json
+            else:
+                erro_msg = resposta_json.get('message', 'Erro desconhecido')
+                raise HTTPException(status_code=400, detail=f"API retornou erro: {erro_msg}")
+        
+        elif response.status_code == 409:
+            raise HTTPException(status_code=409, detail="Lote já foi enviado anteriormente (duplicado)")
+        
+        else:
+            raise HTTPException(status_code=response.status_code, detail=f"Erro HTTP: {response.text}")
+    
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout ao conectar com a API")
+    
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Erro de conexão com a API")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/consultar-status")
+def consultar_status_upload(request: ConsultarStatusRequest):
+    """
+    Consulta status de um upload pelo hash
+    
+    Retorna:
+        {
+            "success": true,
+            "status": 1,  # 0=pendente, 1=enviado, 2=erro
+            "nota_fiscal": "arquivo.pdf",
+            "data_upload": "2025-11-12T10:30:00",
+            "message": "Status consultado"
+        }
+    """
+    
+    try:
+        # Consultar API
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "NovoMundo-DisparadorEmail/1.0",
+            "X-API-Key": API_UPLOAD_KEY
+        }
+        
+        url = f"{API_UPLOAD_URL}consulta/{request.hash}"
+        
+        print(f"\n🔍 Consultando status:")
+        print(f"   URL: {url}")
+        
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=30,
+            verify=False
+        )
+        
+        print(f"   Status: {response.status_code}")
+        print(f"   Resposta: {response.text}")
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise HTTPException(status_code=response.status_code, detail=f"Erro HTTP: {response.text}")
+    
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout ao conectar com a API")
+    
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Erro de conexão com a API")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/status/{hash}")
+def get_status_upload(hash: str):
+    """
+    Consulta status de um upload pelo hash (via GET)
+    """
+    return consultar_status_upload(ConsultarStatusRequest(hash=hash))

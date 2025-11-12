@@ -18,20 +18,12 @@ import {
 import { Search, Plus, Mail, Phone, Percent, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { montadoresService } from "@/services/montadores.service";
+import { blacklistService, BoletimBlacklistItem } from "@/services/blacklist.service";
 import { Montador } from "@/types/montador";
-
-interface BlacklistItem {
-  id: number;
-  montador_id: number;
-  montador_nome: string;
-  boletim: string;
-  motivo: string;
-  data_adicao: string;
-}
 
 export default function Montadores() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>([]);
+  const [blacklistItems, setBlacklistItems] = useState<BoletimBlacklistItem[]>([]);
   const [montadorSelecionado, setMontadorSelecionado] = useState<number | null>(null);
   const [numerosBoletim, setNumerosBoletim] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -78,11 +70,11 @@ export default function Montadores() {
 
   const carregarBlacklist = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/boletins`);
-      const data = await res.json();
+      const data = await blacklistService.getAllBoletins();
       setBlacklistItems(data);
     } catch (error) {
       console.error("Erro ao carregar blacklist:", error);
+      toast.error("Erro ao carregar blacklist");
     }
   };
 
@@ -96,21 +88,15 @@ export default function Montadores() {
 
     try {
       for (const numero of numerosArray) {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/boletins`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        try {
+          await blacklistService.addBoletim({
             montador_id: montadorSelecionado,
             boletim: numero,
-            motivo: motivo || null,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          toast.error(`${numero}: ${error.detail || 'Erro ao adicionar'}`);
-        } else {
+            motivo: motivo || undefined,
+          });
           toast.success(`Boletim ${numero} adicionado à blacklist`);
+        } catch (error: any) {
+          toast.error(`${numero}: ${error.message || 'Erro ao adicionar'}`);
         }
       }
 
@@ -126,18 +112,11 @@ export default function Montadores() {
 
   const removerDaBlacklist = async (id: number, numero: string) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/boletins/${id}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        toast.success(`Boletim ${numero} removido da blacklist`);
-        carregarBlacklist();
-      } else {
-        toast.error("Erro ao remover da blacklist");
-      }
-    } catch (error) {
-      toast.error("Erro ao remover da blacklist");
+      await blacklistService.removeBoletim(id);
+      toast.success(`Boletim ${numero} removido da blacklist`);
+      carregarBlacklist();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao remover da blacklist");
       console.error(error);
     }
   };
@@ -155,45 +134,36 @@ export default function Montadores() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/montadores`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome: formNome,
-          identificador: formIdentificador,
-          email: formEmail,
-          fornecedor_id: formFornecedorId,
-          percentual_comissao: parseFloat(formPercentualComissao) / 100,
-          auxilio_semanal: parseFloat(formAuxilioSemanal),
-          regra_envio: formRegraEnvio,
-          dias_envio: formDiasEnvio,
-          emails_adicionais: formEmailsAdicionais || null,
-          tempo_vencimento_dias: parseInt(formTempoVencimento),
-        }),
+      await montadoresService.create({
+        nome: formNome,
+        identificador: formIdentificador,
+        email: formEmail,
+        fornecedor_id: formFornecedorId,
+        percentual_comissao: parseFloat(formPercentualComissao) / 100,
+        auxilio_semanal: parseFloat(formAuxilioSemanal),
+        regra_envio: formRegraEnvio,
+        dias_envio: formDiasEnvio,
+        emails_adicionais: formEmailsAdicionais || null,
+        tempo_vencimento_dias: parseInt(formTempoVencimento),
       });
 
-      if (response.ok) {
-        toast.success("Montador adicionado com sucesso!");
-        setDialogOpen(false);
-        // Limpar form
-        setFormNome("");
-        setFormIdentificador("");
-        setFormEmail("");
-        setFormEmailsAdicionais("");
-        setFormFornecedorId("");
-        setFormPercentualComissao("5.0");
-        setFormAuxilioSemanal("100.00");
-        setFormRegraEnvio("Nenhuma");
-        setFormDiasEnvio("");
-        setFormTempoVencimento("10");
-        // Recarregar lista
-        carregarMontadores();
-      } else {
-        const error = await response.json();
-        toast.error(error.detail || "Erro ao adicionar montador");
-      }
-    } catch (error) {
-      toast.error("Erro ao adicionar montador");
+      toast.success("Montador adicionado com sucesso!");
+      setDialogOpen(false);
+      // Limpar form
+      setFormNome("");
+      setFormIdentificador("");
+      setFormEmail("");
+      setFormEmailsAdicionais("");
+      setFormFornecedorId("");
+      setFormPercentualComissao("5.0");
+      setFormAuxilioSemanal("100.00");
+      setFormRegraEnvio("Nenhuma");
+      setFormDiasEnvio("");
+      setFormTempoVencimento("10");
+      // Recarregar lista
+      carregarMontadores();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao adicionar montador");
       console.error(error);
     }
   };

@@ -15,9 +15,9 @@ load_dotenv()
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'braco_direito'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASS', 'postgres')
+    'dbname': os.getenv('DB_NAME', 'email'),
+    'user': os.getenv('DB_USER', 'david'),
+    'password': os.getenv('DB_PASS', '')
 }
 
 @contextmanager
@@ -42,77 +42,27 @@ def get_db_connection():
         conn.close()
 
 def init_db():
-    """Inicializa as tabelas do banco de dados"""
-    with get_db_connection() as conn:
-        cur = conn.cursor()
-        
-        # Criar tabela de prestadores
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS prestadores (
-                id SERIAL PRIMARY KEY,
-                nome TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL,
-                fornecedor_id TEXT UNIQUE,
-                telefone TEXT,
-                regra_envio TEXT,
-                dias_envio TEXT,
-                tempo_vencimento_dias INTEGER DEFAULT 10,
-                emails_adicionais TEXT,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        
-        # Criar tabela de montadores
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS montadores (
-                id SERIAL PRIMARY KEY,
-                nome TEXT NOT NULL,
-                identificador TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL,
-                telefone TEXT,
-                percentual_comissao REAL NOT NULL,
-                auxilio_semanal REAL NOT NULL,
-                ativo BOOLEAN NOT NULL DEFAULT TRUE,
-                fornecedor_id TEXT UNIQUE,
-                regra_envio TEXT,
-                dias_envio TEXT,
-                tempo_vencimento_dias INTEGER DEFAULT 10,
-                emails_adicionais TEXT,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        
-        # Criar tabela de lotes de serviço
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS lotes_servico (
-                id SERIAL PRIMARY KEY,
-                prestador_id INTEGER REFERENCES prestadores(id),
-                prestador_nome TEXT,
-                periodo TEXT NOT NULL,
-                valor_total REAL NOT NULL,
-                data_envio TIMESTAMP NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Em Aberto',
-                conversation_id TEXT,
-                anexo_path TEXT,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        
-        # Criar tabela de OS enviadas
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS os_enviadas (
-                id SERIAL PRIMARY KEY,
-                lote_id INTEGER REFERENCES lotes_servico(id) ON DELETE CASCADE,
-                os_numero TEXT NOT NULL UNIQUE,
-                detalhes JSONB,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        
-        print("✅ Tabelas criadas/verificadas com sucesso")
+    """Verifica se o banco de dados está acessível"""
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # Verificar se as tabelas principais existem
+            cur.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('prestadores', 'montadores', 'lotes_servico', 'envios_montagem')
+            """)
+            tables = [row[0] for row in cur.fetchall()]
+            
+            if len(tables) >= 4:
+                print(f"✅ Banco de dados conectado! Tabelas encontradas: {', '.join(tables)}")
+            else:
+                print(f"⚠️  Banco conectado mas apenas {len(tables)} tabelas encontradas.")
+                print("   Execute run_migrations() no sistema_original/database.py se necessário.")
+    except Exception as e:
+        print(f"❌ Erro ao conectar ao banco: {e}")
+        raise
 
 def test_connection():
     """Testa a conexão com o banco de dados"""

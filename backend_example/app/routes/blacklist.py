@@ -48,33 +48,29 @@ def adicionar_os_blacklist(item: OSBlacklistAdd):
         HTTPException 400: Se O.S. já está na blacklist
     """
     
-    conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO os_blacklist (prestador_id, os_numero, motivo)
-                VALUES (%s, %s, %s)
-                RETURNING id
-            """, (item.prestador_id, item.os_numero, item.motivo))
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO os_blacklist (prestador_id, os_numero, motivo)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """, (item.prestador_id, item.os_numero, item.motivo))
+                
+                blacklist_id = cur.fetchone()[0]
             
-            blacklist_id = cur.fetchone()[0]
-        
-        conn.commit()
-        return {
-            "success": True,
-            "message": f"O.S. {item.os_numero} adicionada à blacklist",
-            "id": blacklist_id
-        }
+            conn.commit()
+            return {
+                "success": True,
+                "message": f"O.S. {item.os_numero} adicionada à blacklist",
+                "id": blacklist_id
+            }
     
     except psycopg2.IntegrityError:
-        conn.rollback()
         raise HTTPException(
             status_code=400, 
             detail=f"O.S. {item.os_numero} já está na blacklist para este prestador"
         )
-    
-    finally:
-        conn.close()
 
 @router.get("/os")
 def listar_os_blacklist():
@@ -91,24 +87,23 @@ def listar_os_blacklist():
         - data_adicao: Quando foi adicionado
     """
     
-    conn = get_db_connection()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT 
-                osb.id,
-                osb.prestador_id,
-                osb.os_numero,
-                osb.motivo,
-                osb.data_adicao,
-                p.nome as prestador_nome
-            FROM os_blacklist osb
-            JOIN prestadores p ON p.id = osb.prestador_id
-            ORDER BY osb.data_adicao DESC
-        """)
-        
-        items = cur.fetchall()
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    osb.id,
+                    osb.prestador_id,
+                    osb.os_numero,
+                    osb.motivo,
+                    osb.data_adicao,
+                    p.nome as prestador_nome
+                FROM os_blacklist osb
+                JOIN prestadores p ON p.id = osb.prestador_id
+                ORDER BY osb.data_adicao DESC
+            """)
+            
+            items = cur.fetchall()
     
-    conn.close()
     return items
 
 @router.delete("/os/{id}")
@@ -127,15 +122,14 @@ def remover_os_blacklist(id: int):
         HTTPException 404: Se item não foi encontrado
     """
     
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM os_blacklist WHERE id = %s", (id,))
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM os_blacklist WHERE id = %s", (id,))
+            
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Item não encontrado")
         
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Item não encontrado")
-    
-    conn.commit()
-    conn.close()
+        conn.commit()
     
     return {"success": True, "message": "Item removido da blacklist"}
 
@@ -154,17 +148,16 @@ def verificar_os_blacklist(data: CheckList):
     if not data.numbers:
         return []
     
-    conn = get_db_connection()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT DISTINCT os_numero 
-            FROM os_blacklist 
-            WHERE os_numero = ANY(%s)
-        """, (data.numbers,))
-        
-        blacklisted = [row['os_numero'] for row in cur.fetchall()]
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT os_numero 
+                FROM os_blacklist 
+                WHERE os_numero = ANY(%s)
+            """, (data.numbers,))
+            
+            blacklisted = [row['os_numero'] for row in cur.fetchall()]
     
-    conn.close()
     return blacklisted
 
 # ===== ROTAS PARA BOLETINS (MONTADORES) =====
@@ -186,33 +179,29 @@ def adicionar_boletim_blacklist(item: BoletimBlacklistAdd):
         HTTPException 400: Se boletim já está na blacklist
     """
     
-    conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO boletins_blacklist (montador_id, boletim, motivo)
-                VALUES (%s, %s, %s)
-                RETURNING id
-            """, (item.montador_id, item.boletim, item.motivo))
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO boletins_blacklist (montador_id, boletim, motivo)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """, (item.montador_id, item.boletim, item.motivo))
+                
+                blacklist_id = cur.fetchone()[0]
             
-            blacklist_id = cur.fetchone()[0]
-        
-        conn.commit()
-        return {
-            "success": True,
-            "message": f"Boletim {item.boletim} adicionado à blacklist",
-            "id": blacklist_id
-        }
+            conn.commit()
+            return {
+                "success": True,
+                "message": f"Boletim {item.boletim} adicionado à blacklist",
+                "id": blacklist_id
+            }
     
     except psycopg2.IntegrityError:
-        conn.rollback()
         raise HTTPException(
             status_code=400, 
             detail=f"Boletim {item.boletim} já está na blacklist para este montador"
         )
-    
-    finally:
-        conn.close()
 
 @router.get("/boletins")
 def listar_boletins_blacklist():
@@ -229,24 +218,23 @@ def listar_boletins_blacklist():
         - data_adicao: Quando foi adicionado
     """
     
-    conn = get_db_connection()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT 
-                bb.id,
-                bb.montador_id,
-                bb.boletim,
-                bb.motivo,
-                bb.data_adicao,
-                m.nome as montador_nome
-            FROM boletins_blacklist bb
-            JOIN montadores m ON m.id = bb.montador_id
-            ORDER BY bb.data_adicao DESC
-        """)
-        
-        items = cur.fetchall()
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    bb.id,
+                    bb.montador_id,
+                    bb.boletim,
+                    bb.motivo,
+                    bb.data_adicao,
+                    m.nome as montador_nome
+                FROM boletins_blacklist bb
+                JOIN montadores m ON m.id = bb.montador_id
+                ORDER BY bb.data_adicao DESC
+            """)
+            
+            items = cur.fetchall()
     
-    conn.close()
     return items
 
 @router.delete("/boletins/{id}")
@@ -265,15 +253,14 @@ def remover_boletim_blacklist(id: int):
         HTTPException 404: Se item não foi encontrado
     """
     
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM boletins_blacklist WHERE id = %s", (id,))
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM boletins_blacklist WHERE id = %s", (id,))
+            
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Item não encontrado")
         
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Item não encontrado")
-    
-    conn.commit()
-    conn.close()
+        conn.commit()
     
     return {"success": True, "message": "Item removido da blacklist"}
 
@@ -292,15 +279,14 @@ def verificar_boletins_blacklist(data: CheckList):
     if not data.numbers:
         return []
     
-    conn = get_db_connection()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT DISTINCT boletim 
-            FROM boletins_blacklist 
-            WHERE boletim = ANY(%s)
-        """, (data.numbers,))
-        
-        blacklisted = [row['boletim'] for row in cur.fetchall()]
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT boletim 
+                FROM boletins_blacklist 
+                WHERE boletim = ANY(%s)
+            """, (data.numbers,))
+            
+            blacklisted = [row['boletim'] for row in cur.fetchall()]
     
-    conn.close()
     return blacklisted

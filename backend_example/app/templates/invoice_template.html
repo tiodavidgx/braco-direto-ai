@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 30px; color: #333; }
+        .logo { text-align: center; margin-bottom: 20px; }
+        .logo img { max-width: 200px; height: auto; }
+        h1 { text-align: center; font-size: 22px; color: #003366; }
+        .subheader { text-align: center; font-size: 14px; margin-bottom: 25px; }
+        /* NOVO: Estilo para o ID do Lote */
+        .lote-id { text-align: center; font-size: 12px; color: #555; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f0f0f0; font-weight: bold; }
+        .total-row { background-color: #f0f0f0; font-weight: bold; }
+        .total-row td:first-child { text-align: right; }
+        .footer { margin-top: 40px; font-size: 10px; text-align: center; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Novo Mundo Logo">
+    </div>
+
+    <h1>Relatório de Fechamento para Faturamento</h1>
+    <div class="subheader">
+        <strong>Prestador:</strong> {{ nome_prestador }} | <strong>Período:</strong> {{ periodo }}
+    </div>
+    <div class="lote-id">
+        #{{ lote_id }}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>O.S</th>
+                <th>Cliente</th>
+                <th>Localidade</th>
+                <th>Modalidade de Serviço</th>
+                <th>Data de Execução</th>
+                <th>Valor (R$)</th>
+                <th>Valor Extra (R$)</th>
+                <th>Motivo Valor Extra</th>
+                <th>Valor Total (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.OS }}</td>
+                <td>{{ item.Cliente }}</td>
+                <td>{{ item.Localidade }}</td>
+                <td>{{ item.Modalidade }}</td>
+                <td>{{ item.Data_execucao }}</td>
+                <td>{{ item.Valor }}</td>
+                <td>{{ item.Valor_extra }}</td>
+                <td>{{ item.Motivo_valor_extra }}</td>
+                <td>{{ item.Valor_total }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="8">TOTAL GERAL (R$)</td>
+                <td>{{ total_geral }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Este relatório foi gerado automaticamente pelo sistema Disparador Novo Mundo.
+    </div>
+</body>
+</html>

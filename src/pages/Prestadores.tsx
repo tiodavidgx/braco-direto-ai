@@ -18,20 +18,12 @@ import {
 import { Search, Plus, Mail, Phone, Calendar, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { prestadoresService } from "@/services/prestadores.service";
+import { blacklistService, OSBlacklistItem } from "@/services/blacklist.service";
 import { Prestador } from "@/types/prestador";
-
-interface BlacklistItem {
-  id: number;
-  prestador_id: number;
-  prestador_nome: string;
-  os_numero: string;
-  motivo: string;
-  data_adicao: string;
-}
 
 export default function Prestadores() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>([]);
+  const [blacklistItems, setBlacklistItems] = useState<OSBlacklistItem[]>([]);
   const [prestadorSelecionado, setPrestadorSelecionado] = useState<number | null>(null);
   const [numerosOS, setNumerosOS] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -45,6 +37,7 @@ export default function Prestadores() {
   // Form states
   const [formNome, setFormNome] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formTelefone, setFormTelefone] = useState("");
   const [formEmailsAdicionais, setFormEmailsAdicionais] = useState("");
   const [formFornecedorId, setFormFornecedorId] = useState("");
   const [formRegraEnvio, setFormRegraEnvio] = useState("Nenhuma");
@@ -75,11 +68,11 @@ export default function Prestadores() {
 
   const carregarBlacklist = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/os`);
-      const data = await res.json();
+      const data = await blacklistService.getAllOS();
       setBlacklistItems(data);
     } catch (error) {
       console.error("Erro ao carregar blacklist:", error);
+      toast.error("Erro ao carregar blacklist");
     }
   };
 
@@ -93,21 +86,15 @@ export default function Prestadores() {
 
     try {
       for (const numero of numerosArray) {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/os`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        try {
+          await blacklistService.addOS({
             prestador_id: prestadorSelecionado,
             os_numero: numero,
-            motivo: motivo || null,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          toast.error(`${numero}: ${error.detail || 'Erro ao adicionar'}`);
-        } else {
+            motivo: motivo || undefined,
+          });
           toast.success(`O.S. ${numero} adicionada à blacklist`);
+        } catch (error: any) {
+          toast.error(`${numero}: ${error.message || 'Erro ao adicionar'}`);
         }
       }
 
@@ -123,18 +110,11 @@ export default function Prestadores() {
 
   const removerDaBlacklist = async (id: number, numero: string) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/blacklist/os/${id}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        toast.success(`O.S. ${numero} removida da blacklist`);
-        carregarBlacklist();
-      } else {
-        toast.error("Erro ao remover da blacklist");
-      }
-    } catch (error) {
-      toast.error("Erro ao remover da blacklist");
+      await blacklistService.removeOS(id);
+      toast.success(`O.S. ${numero} removida da blacklist`);
+      carregarBlacklist();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao remover da blacklist");
       console.error(error);
     }
   };
@@ -149,8 +129,9 @@ export default function Prestadores() {
     setPrestadorEditando(prestador);
     setFormNome(prestador.nome);
     setFormEmail(prestador.email);
+    setFormTelefone(prestador.telefone || "");
     setFormEmailsAdicionais(prestador.emails_adicionais || "");
-    setFormFornecedorId(prestador.fornecedor_id);
+    setFormFornecedorId(prestador.fornecedor_id || "");
     setFormRegraEnvio(prestador.regra_envio || "Nenhuma");
     setFormDiasEnvio(prestador.dias_envio || "");
     setFormTempoVencimento(prestador.tempo_vencimento_dias?.toString() || "10");
@@ -160,6 +141,7 @@ export default function Prestadores() {
   const limparForm = () => {
     setFormNome("");
     setFormEmail("");
+    setFormTelefone("");
     setFormEmailsAdicionais("");
     setFormFornecedorId("");
     setFormRegraEnvio("Nenhuma");
@@ -175,31 +157,23 @@ export default function Prestadores() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/prestadores`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome: formNome,
-          email: formEmail,
-          fornecedor_id: formFornecedorId,
-          regra_envio: formRegraEnvio,
-          dias_envio: formDiasEnvio,
-          emails_adicionais: formEmailsAdicionais || null,
-          tempo_vencimento_dias: parseInt(formTempoVencimento),
-        }),
+      await prestadoresService.create({
+        nome: formNome,
+        email: formEmail,
+        telefone: formTelefone || undefined,
+        fornecedor_id: formFornecedorId,
+        regra_envio: formRegraEnvio,
+        dias_envio: formDiasEnvio,
+        emails_adicionais: formEmailsAdicionais || undefined,
+        tempo_vencimento_dias: parseInt(formTempoVencimento),
       });
 
-      if (response.ok) {
-        toast.success("Prestador adicionado com sucesso!");
-        setDialogOpen(false);
-        limparForm();
-        carregarPrestadores();
-      } else {
-        const error = await response.json();
-        toast.error(error.detail || "Erro ao adicionar prestador");
-      }
-    } catch (error) {
-      toast.error("Erro ao adicionar prestador");
+      toast.success("Prestador adicionado com sucesso!");
+      setDialogOpen(false);
+      limparForm();
+      carregarPrestadores();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao adicionar prestador");
       console.error(error);
     }
   };
@@ -214,10 +188,11 @@ export default function Prestadores() {
       await prestadoresService.update(prestadorEditando.id, {
         nome: formNome,
         email: formEmail,
+        telefone: formTelefone || undefined,
         fornecedor_id: formFornecedorId,
         regra_envio: formRegraEnvio,
         dias_envio: formDiasEnvio,
-        emails_adicionais: formEmailsAdicionais || null,
+        emails_adicionais: formEmailsAdicionais || undefined,
         tempo_vencimento_dias: parseInt(formTempoVencimento),
       });
 
@@ -225,8 +200,8 @@ export default function Prestadores() {
       setEditDialogOpen(false);
       limparForm();
       carregarPrestadores();
-    } catch (error) {
-      toast.error("Erro ao atualizar prestador");
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao atualizar prestador");
       console.error(error);
     }
   };
@@ -275,6 +250,17 @@ export default function Prestadores() {
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   placeholder="contato@empresa.com"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="telefone">Telefone</Label>
+                <Input
+                  id="telefone"
+                  type="tel"
+                  value={formTelefone}
+                  onChange={(e) => setFormTelefone(e.target.value)}
+                  placeholder="(11) 99999-9999"
                 />
               </div>
 
@@ -497,6 +483,17 @@ export default function Prestadores() {
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
                     placeholder="contato@empresa.com"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-telefone">Telefone</Label>
+                  <Input
+                    id="edit-telefone"
+                    type="tel"
+                    value={formTelefone}
+                    onChange={(e) => setFormTelefone(e.target.value)}
+                    placeholder="(11) 99999-9999"
                   />
                 </div>
 

@@ -8,7 +8,7 @@ Este é o arquivo principal que inicia a aplicação FastAPI.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
-from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs
+from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api
 
 # Criar aplicação FastAPI
 app = FastAPI(
@@ -57,6 +57,12 @@ def health_check():
     return {"status": "healthy"}
 
 # Registrar rotas (endpoints)
+app.include_router(
+    auth.router, 
+    prefix="/api/v1/auth", 
+    tags=["Autenticação"]
+)
+
 app.include_router(
     dashboard.router, 
     prefix="/api/v1/dashboard", 
@@ -115,6 +121,12 @@ app.include_router(
     jobs.router, 
     prefix="/api/v1/jobs", 
     tags=["Jobs"]
+)
+
+app.include_router(
+    upload_api.router, 
+    prefix="/api/v1/upload", 
+    tags=["Upload API"]
 )
 
 # Tratamento de erros globais

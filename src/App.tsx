@@ -15,6 +15,7 @@ import WhatsApp from "./pages/WhatsApp";
 import Automacao from "./pages/Automacao";
 import Integracoes from "./pages/Integracoes";
 import Jobs from "./pages/Jobs";
+import EmailConfig from "./pages/EmailConfig";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,8 @@ const App = () => (
                   <Route path="/automacao" element={<Automacao />} />
                   <Route path="/integracoes" element={<Integracoes />} />
                   <Route path="/jobs" element={<Jobs />} />
+                  <Route path="/email-config" element={<EmailConfig />} />
+                  <Route path="/auth/callback" element={<EmailConfig />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
