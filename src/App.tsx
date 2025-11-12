@@ -11,6 +11,9 @@ import Montadores from "./pages/Montadores";
 import EnvioRelatorios from "./pages/EnvioRelatorios";
 import HistoricoEnvios from "./pages/HistoricoEnvios";
 import PagamentosVencidos from "./pages/PagamentosVencidos";
+import WhatsApp from "./pages/WhatsApp";
+import Automacao from "./pages/Automacao";
+import Integracoes from "./pages/Integracoes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +36,9 @@ const App = () => (
                   <Route path="/envio-relatorios" element={<EnvioRelatorios />} />
                   <Route path="/historico-envios" element={<HistoricoEnvios />} />
                   <Route path="/pagamentos-vencidos" element={<PagamentosVencidos />} />
+                  <Route path="/whatsapp" element={<WhatsApp />} />
+                  <Route path="/automacao" element={<Automacao />} />
+                  <Route path="/integracoes" element={<Integracoes />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

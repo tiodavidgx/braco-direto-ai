@@ -1,0 +1,380 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { FileText, Zap, History, Plus, Edit, Trash2, TestTube } from "lucide-react";
+import { automacaoService } from "@/services/automacao.service";
+
+export default function Automacao() {
+  const { toast } = useToast();
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [triggers, setTriggers] = useState<any[]>([]);
+  const [modoEdicao, setModoEdicao] = useState<"lista" | "novo" | "editar">("lista");
+  const [templateEditando, setTemplateEditando] = useState<any>(null);
+  const [nomeTemplate, setNomeTemplate] = useState("");
+  const [tipoTemplate, setTipoTemplate] = useState("prestador");
+  const [textoTemplate, setTextoTemplate] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    carregarTemplates();
+    carregarTriggers();
+  }, []);
+
+  const carregarTemplates = async () => {
+    try {
+      const data = await automacaoService.getTemplates();
+      setTemplates(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erro ao carregar templates:", error);
+    }
+  };
+
+  const carregarTriggers = async () => {
+    try {
+      const data = await automacaoService.getTriggers();
+      setTriggers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erro ao carregar triggers:", error);
+    }
+  };
+
+  const salvarTemplate = async () => {
+    if (!nomeTemplate || !textoTemplate) {
+      toast({ title: "Erro", description: "Preencha todos os campos", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (modoEdicao === "novo") {
+        await automacaoService.createTemplate({
+          nome: nomeTemplate,
+          tipo: tipoTemplate,
+          template: textoTemplate,
+          ativo: true,
+        });
+        toast({ title: "Sucesso", description: "Template criado!" });
+      } else {
+        await automacaoService.updateTemplate(templateEditando.id, {
+          template: textoTemplate,
+        });
+        toast({ title: "Sucesso", description: "Template atualizado!" });
+      }
+      limparForm();
+      carregarTemplates();
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao salvar template",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deletarTemplate = async (id: string) => {
+    try {
+      await automacaoService.deleteTemplate(id);
+      toast({ title: "Sucesso", description: "Template deletado!" });
+      carregarTemplates();
+    } catch (error: any) {
+      toast({ title: "Erro", description: "Erro ao deletar", variant: "destructive" });
+    }
+  };
+
+  const limparForm = () => {
+    setModoEdicao("lista");
+    setTemplateEditando(null);
+    setNomeTemplate("");
+    setTextoTemplate("");
+  };
+
+  const abrirEdicao = (template: any) => {
+    setModoEdicao("editar");
+    setTemplateEditando(template);
+    setNomeTemplate(template.nome);
+    setTipoTemplate(template.tipo);
+    setTextoTemplate(template.template);
+  };
+
+  const variaveis = {
+    prestador: [
+      "{{nome_prestador}}",
+      "{{periodo}}",
+      "{{valor}}",
+      "{{link}}",
+      "{{numero_nf}}",
+      "{{data_recebimento}}",
+    ],
+    montador: [
+      "{{nome_montador}}",
+      "{{periodo_relatorio}}",
+      "{{valor_total}}",
+      "{{quantidade_os}}",
+      "{{numero_nf}}",
+      "{{data_recebimento}}",
+    ],
+  };
+
+  const templatesPrestador = templates.filter(t => t.tipo === "prestador");
+  const templatesMontador = templates.filter(t => t.tipo === "montador");
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Automação WhatsApp</h1>
+          <p className="text-muted-foreground">Gerencie templates e gatilhos automáticos</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="templates" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="templates">
+            <FileText className="mr-2 h-4 w-4" />
+            Templates
+          </TabsTrigger>
+          <TabsTrigger value="triggers">
+            <Zap className="mr-2 h-4 w-4" />
+            Gatilhos
+          </TabsTrigger>
+          <TabsTrigger value="historico">
+            <History className="mr-2 h-4 w-4" />
+            Histórico
+          </TabsTrigger>
+        </TabsList>
+
+        {/* TAB TEMPLATES */}
+        <TabsContent value="templates" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Templates de Mensagens</CardTitle>
+                <CardDescription>Crie e gerencie templates reutilizáveis</CardDescription>
+              </div>
+              <Button onClick={() => setModoEdicao("novo")}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Template
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {modoEdicao === "novo" || modoEdicao === "editar" ? (
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg">
+                    {modoEdicao === "novo" ? "Criar" : "Editar"} Template
+                  </h3>
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="nome">Nome/ID do Template</Label>
+                        <Input
+                          id="nome"
+                          value={nomeTemplate}
+                          onChange={(e) => setNomeTemplate(e.target.value)}
+                          placeholder="ex: prestador_personalizado_1"
+                          disabled={modoEdicao === "editar"}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="tipo">Tipo</Label>
+                        <Select value={tipoTemplate} onValueChange={setTipoTemplate} disabled={modoEdicao === "editar"}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="prestador">Prestador</SelectItem>
+                            <SelectItem value="montador">Montador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="template">Mensagem</Label>
+                        <Textarea
+                          id="template"
+                          value={textoTemplate}
+                          onChange={(e) => setTextoTemplate(e.target.value)}
+                          placeholder="Digite a mensagem..."
+                          rows={12}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Variáveis Disponíveis</Label>
+                      <div className="bg-muted p-4 rounded-lg space-y-2">
+                        {variaveis[tipoTemplate as keyof typeof variaveis].map((v) => (
+                          <code key={v} className="block bg-background p-2 rounded text-sm">
+                            {v}
+                          </code>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={salvarTemplate} disabled={loading}>
+                      Salvar Template
+                    </Button>
+                    <Button variant="outline" onClick={limparForm}>
+                      Cancelar
+                    </Button>
+                    {modoEdicao === "editar" && (
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm("Tem certeza que deseja deletar?")) {
+                            deletarTemplate(templateEditando.id);
+                            limparForm();
+                          }
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Deletar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {templatesPrestador.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold">Prestadores</h3>
+                      {templatesPrestador.map((t) => (
+                        <Card key={t.id}>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">{t.nome}</CardTitle>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => abrirEdicao(t)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
+                              {t.template.substring(0, 200)}
+                              {t.template.length > 200 && "..."}
+                            </code>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {templatesMontador.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold">Montadores</h3>
+                      {templatesMontador.map((t) => (
+                        <Card key={t.id}>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">{t.nome}</CardTitle>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => abrirEdicao(t)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
+                              {t.template.substring(0, 200)}
+                              {t.template.length > 200 && "..."}
+                            </code>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {templates.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8">
+                      Nenhum template criado ainda. Clique em "Novo Template" para criar.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB TRIGGERS */}
+        <TabsContent value="triggers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Gatilhos Automáticos</CardTitle>
+              <CardDescription>Configure quando as mensagens devem ser enviadas</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[
+                { id: "envio_email_prestador", nome: "Email Enviado - Prestador", descricao: "Quando um email é enviado ao prestador" },
+                { id: "nf_recebida_prestador", nome: "NF Anexada - Prestador", descricao: "Quando o prestador anexa a nota fiscal" },
+                { id: "pagamento_proximo_prestador", nome: "Pagamento Próximo - Prestador", descricao: "X dias antes do vencimento" },
+                { id: "envio_email_montador", nome: "Email Enviado - Montador", descricao: "Quando um email é enviado ao montador" },
+                { id: "nf_recebida_montador", nome: "NF Anexada - Montador", descricao: "Quando o montador anexa a nota fiscal" },
+              ].map((evento) => (
+                <Card key={evento.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base">{evento.nome}</CardTitle>
+                        <CardDescription className="text-sm">{evento.descricao}</CardDescription>
+                      </div>
+                      <Switch />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label>Template</Label>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {templates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB HISTÓRICO */}
+        <TabsContent value="historico" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Histórico de Envios</CardTitle>
+              <CardDescription>Mensagens enviadas automaticamente</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-muted-foreground py-8">
+                Nenhum envio automático registrado ainda
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
