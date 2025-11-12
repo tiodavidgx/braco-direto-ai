@@ -167,20 +167,42 @@ Documentação da API: **http://localhost:8000/docs**
 
 ## 📚 Documentação Completa
 
-- 📖 **[BACKEND_DOCUMENTATION.md](./BACKEND_DOCUMENTATION.md)** - Documentação completa do backend
-  - Estrutura do banco de dados
-  - Endpoints da API REST
-  - Modelos de dados
-  - Guia de implementação
-  - Integrações (WhatsApp, Trello, Email)
+### 📖 Para Desenvolvedores Backend (LEIA PRIMEIRO!)
 
-- 🔗 **[FRONTEND_BACKEND_INTEGRATION.md](./FRONTEND_BACKEND_INTEGRATION.md)** - Guia de integração
+- **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - 🔥 **COMECE AQUI!**
+  - Checklist completo de implementação
+  - Scripts SQL prontos (estrutura completa do banco)
+  - Exemplos de código Python para todos os endpoints
+  - Como testar a integração frontend-backend
+  - Solução de problemas comuns
+  - **Tudo que você precisa para conectar o backend ao frontend novo**
+
+- **[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)** - Referência completa da API
+  - Todos os endpoints documentados
+  - Request/Response examples
+  - Códigos de status HTTP
+  - Tratamento de erros
+  - Como testar com cURL e Swagger
+
+### 📘 Documentação Adicional
+
+- **[BACKEND_DOCUMENTATION.md](./BACKEND_DOCUMENTATION.md)** - Documentação técnica do backend
+  - Arquitetura detalhada
+  - Estrutura completa do banco de dados
+  - Modelos de dados
+  - Integrações externas (WhatsApp, Trello, Email, API DV)
+
+- **[FRONTEND_BACKEND_INTEGRATION.md](./FRONTEND_BACKEND_INTEGRATION.md)** - Guia de integração
   - Configuração do ambiente
-  - Implementação da camada de API
+  - Implementação da camada de API (services)
   - Autenticação JWT
   - Hooks React Query
-  - Tratamento de erros
   - Deploy em produção
+
+- **[QUICKSTART.md](./QUICKSTART.md)** - Guia rápido
+  - Como rodar o projeto em 5 minutos
+  - Comandos essenciais
+  - Problemas comuns e soluções
 
 ---
 
@@ -208,28 +230,49 @@ python migrations/run_migrations.py        # Executar migrations
 
 ## 🎯 Funcionalidades Principais
 
-### ✅ Implementadas
+### ✅ Frontend Implementado (React + TypeScript)
 
 - [x] Dashboard com estatísticas em tempo real
 - [x] Gestão de Prestadores (CRUD completo)
 - [x] Gestão de Montadores (CRUD completo)
+- [x] Pagamentos Vencidos (visualização e controle)
+- [x] WhatsApp (envio individual, listas, bulk)
+- [x] Automação (templates e gatilhos)
+- [x] Integrações (Trello)
+- [x] Jobs Automáticos (gerenciamento completo)
+- [x] Envio de Relatórios (interface pronta)
+- [x] Histórico de Envios (interface pronta)
 - [x] Design system moderno (Google Material Design)
 - [x] Navegação com sidebar responsiva
-- [x] Componentes reutilizáveis (StatCard, Tables, etc.)
-- [x] Estrutura de API pronta para integração
-- [x] Documentação completa
+- [x] Componentes reutilizáveis (StatCard, Tables, Forms, etc.)
+- [x] Services prontos para comunicação com backend
+- [x] **Documentação completa para desenvolvedor backend**
 
-### 🚧 Em Desenvolvimento (Backend Python)
+### 🔨 Backend Python (A IMPLEMENTAR)
 
-- [ ] API REST com FastAPI
+**IMPORTANTE:** Toda a estrutura está documentada em `INTEGRATION_GUIDE.md`
+
+#### Prioridade Alta
+- [ ] Conexão PostgreSQL e estrutura do banco (SQL pronto)
+- [ ] API REST com FastAPI (exemplos prontos)
+- [ ] Endpoints Dashboard (`/stats`, `/pendencias`)
+- [ ] Endpoints Prestadores (CRUD completo)
+- [ ] Endpoints Montadores (CRUD completo)
+- [ ] Endpoints Pagamentos (`/pendentes`, `/marcar-pago`)
+- [ ] Configuração CORS para frontend
+
+#### Prioridade Média
+- [ ] Integração WhatsApp (envio de mensagens)
+- [ ] Sistema de Automação (templates e gatilhos)
+- [ ] Integração Trello (criação de cards)
+- [ ] Sistema de Jobs (scheduler de tarefas)
+
+#### Prioridade Baixa
 - [ ] Autenticação JWT
-- [ ] Gestão de Lotes de Serviço
-- [ ] Upload de Notas Fiscais
-- [ ] Controle de Pagamentos
-- [ ] Integração WhatsApp
-- [ ] Integração Trello
-- [ ] Jobs Automáticos
+- [ ] Upload de Notas Fiscais (API DV)
 - [ ] Geração de PDFs (relatórios)
+- [ ] Integração Email (Microsoft Graph)
+- [ ] Logs e auditoria
 
 ### 📅 Roadmap
 
