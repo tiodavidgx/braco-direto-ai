@@ -6,11 +6,10 @@ Gera PDFs e envia por email usando Microsoft Graph API
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
-from jinja2 import Template
-from weasyprint import HTML
 from pathlib import Path
 import base64
 from datetime import datetime
+from app.utils.pdf_generator import gerar_pdf_prestador, gerar_pdf_montador
 
 router = APIRouter()
 
@@ -31,52 +30,7 @@ def get_access_token():
     # Por enquanto, retornar token mock
     return "TOKEN_AQUI"
 
-def gerar_pdf_prestador(lote_data):
-    """Gera PDF do relatório de prestador"""
-    
-    # Template HTML (usar o template do sistema original)
-    template_path = Path(__file__).parent.parent / 'templates' / 'invoice_template.html'
-    
-    with open(template_path, 'r') as f:
-        template = Template(f.read())
-    
-    # Renderizar HTML
-    html_content = template.render(
-        nome_prestador=lote_data['prestador_nome'],
-        periodo=lote_data['periodo'],
-        lote_id=lote_data['id'],
-        items=lote_data['os_list'],
-        total_geral=lote_data['valor_total']
-    )
-    
-    # Gerar PDF
-    pdf_path = f"/tmp/relatorio_prestador_{lote_data['id']}.pdf"
-    HTML(string=html_content).write_pdf(pdf_path)
-    
-    return pdf_path
-
-def gerar_pdf_montador(envio_data):
-    """Gera PDF do relatório de montador"""
-    
-    template_path = Path(__file__).parent.parent / 'templates' / 'montador_template.html'
-    
-    with open(template_path, 'r') as f:
-        template = Template(f.read())
-    
-    html_content = template.render(
-        nome_montador=envio_data['montador_nome'],
-        periodo_relatorio=envio_data['periodo'],
-        items=envio_data['montagens'],
-        percentual_comissao=envio_data['percentual_comissao'],
-        total_comissoes=envio_data['total_comissoes'],
-        auxilio_semanal=envio_data['auxilio_semanal'],
-        valor_final=envio_data['valor_final']
-    )
-    
-    pdf_path = f"/tmp/relatorio_montador_{envio_data['id']}.pdf"
-    HTML(string=html_content).write_pdf(pdf_path)
-    
-    return pdf_path
+# As funções de geração de PDF agora estão em app/utils/pdf_generator.py
 
 def enviar_email_graph(destinatario: str, assunto: str, corpo_html: str, anexo_path: str = None):
     """
