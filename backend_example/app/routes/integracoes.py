@@ -1,13 +1,17 @@
+"""
+Rotas de Integrações (Trello, WhatsApp, etc)
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-import psycopg2
-from ..database import get_db_connection
+from typing import Optional, List, Dict, Any
+from app.database import get_db_connection
+from app.services.trello_service import TrelloIntegration
 
 router = APIRouter()
 
 
-class TrelloConfig(BaseModel):
+class TrelloConfigModel(BaseModel):
     trello_api_key: Optional[str] = None
     trello_token: Optional[str] = None
     trello_board_id: Optional[str] = None
@@ -16,38 +20,161 @@ class TrelloConfig(BaseModel):
 
 
 @router.get("/trello/config")
-def get_trello_config():
-    """Retorna a configuração atual do Trello"""
-    # Por enquanto retorna config vazia - implementar leitura de tabela se necessário
-    return {
-        "trello_api_key": "",
-        "trello_token": "",
-        "trello_board_id": "",
-        "trello_list_id": "",
-        "trello_ativo": False
-    }
+async def get_trello_config():
+    """Retorna a configuração atual do Trello do banco de dados"""
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            
+            cur.execute("""
+                SELECT 
+                    trello_api_key, 
+                    trello_token, 
+                    trello_board_id, 
+                    trello_list_id,
+                    trello_ativo
+                FROM integracoes_config 
+                WHERE id = 1
+            """)
+            
+            result = cur.fetchone()
+            
+            if result:
+                return {
+                    "trello_api_key": result[0] or "",
+                    "trello_token": result[1] or "",
+                    "trello_board_id": result[2] or "",
+                    "trello_list_id": result[3] or "",
+                    "trello_ativo": result[4] or False
+                }
+            else:
+                # Se não existir, criar registro padrão
+                cur.execute("""
+                    INSERT INTO integracoes_config 
+                    (id, trello_api_key, trello_token, trello_board_id, trello_list_id, trello_ativo)
+                    VALUES (1, '', '', '', '', false)
+                    RETURNING trello_api_key, trello_token, trello_board_id, trello_list_id, trello_ativo
+                """)
+                conn.commit()
+                result = cur.fetchone()
+                
+                return {
+                    "trello_api_key": "",
+                    "trello_token": "",
+                    "trello_board_id": "",
+                    "trello_list_id": "",
+                    "trello_ativo": False
+                }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar configuração: {str(e)}")
 
 
 @router.post("/trello/config")
-def save_trello_config(config: TrelloConfig):
-    """Salva a configuração do Trello"""
-    # Por enquanto apenas confirma - implementar persistência se necessário
-    return {"message": "Configuração salva com sucesso"}
+async def save_trello_config(config: TrelloConfigModel):
+    """Salva a configuração do Trello no banco de dados"""
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            
+            # Atualizar ou inserir configuração
+            cur.execute("""
+                INSERT INTO integracoes_config 
+                (id, trello_api_key, trello_token, trello_board_id, trello_list_id, trello_ativo)
+                VALUES (1, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE
+                SET 
+                    trello_api_key = EXCLUDED.trello_api_key,
+                    trello_token = EXCLUDED.trello_token,
+                    trello_board_id = EXCLUDED.trello_board_id,
+                    trello_list_id = EXCLUDED.trello_list_id,
+                    trello_ativo = EXCLUDED.trello_ativo
+            """, (
+                config.trello_api_key or '',
+                config.trello_token or '',
+                config.trello_board_id or '',
+                config.trello_list_id or '',
+                config.trello_ativo
+            ))
+            
+            conn.commit()
+            
+        return {"success": True, "message": "Configuração salva com sucesso"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar configuração: {str(e)}")
 
 
 @router.post("/trello/test")
-def test_trello_connection():
-    """Testa a conexão com o Trello"""
-    # Aqui você implementaria a lógica real de teste
-    # Por enquanto, apenas retorna sucesso
-    return {"success": True, "message": "Conexão OK"}
+async def test_trello_connection():
+    """Testa a conexão com o Trello listando boards"""
+    try:
+        trello = TrelloIntegration()
+        
+        if not trello.api_key or not trello.token:
+            raise HTTPException(
+                status_code=400, 
+                detail="API Key e Token não configurados. Configure primeiro em Configurações."
+            )
+        
+        # Tentar listar boards para testar credenciais
+        boards = trello.listar_boards()
+        
+        return {
+            "success": True, 
+            "message": f"Conexão OK! {len(boards)} board(s) encontrado(s)",
+            "boards_count": len(boards)
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao testar conexão: {str(e)}")
 
 
 @router.get("/trello/boards")
-def list_boards():
-    """Lista os boards do Trello"""
-    # Implementar integração real com API do Trello
-    return []
+async def list_trello_boards():
+    """Lista os boards do Trello do usuário"""
+    try:
+        trello = TrelloIntegration()
+        
+        if not trello.api_key or not trello.token:
+            return []
+        
+        boards = trello.listar_boards()
+        
+        # Retornar apenas id e nome
+        return [
+            {"id": board["id"], "name": board["name"]}
+            for board in boards
+        ]
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar boards: {str(e)}")
+
+
+@router.get("/trello/listas/{board_id}")
+async def list_trello_lists(board_id: str):
+    """Lista as listas de um board específico do Trello"""
+    try:
+        trello = TrelloIntegration()
+        
+        if not trello.api_key or not trello.token:
+            return []
+        
+        listas = trello.listar_listas(board_id)
+        
+        # Retornar apenas id e nome
+        return [
+            {"id": lista["id"], "name": lista["name"]}
+            for lista in listas
+        ]
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar listas: {str(e)}")
 
 
 @router.get("/trello/boards/{board_id}/lists")

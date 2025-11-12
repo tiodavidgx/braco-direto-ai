@@ -65,6 +65,10 @@ export default function EnvioRelatorios() {
   const [sending, setSending] = useState(false);
   const [enviarWhatsApp, setEnviarWhatsApp] = useState(true);
   
+  // Status preview
+  const [statusPreview, setStatusPreview] = useState<any[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  
   // Dados do banco
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [montadores, setMontadores] = useState<Montador[]>([]);
@@ -141,6 +145,85 @@ Qualquer dúvida, estamos à disposição.`,
 
     loadData();
   }, []);
+
+  // Verificar status quando dados mudarem
+  useEffect(() => {
+    const verificarStatus = async () => {
+      if (dataParaEnvio.length === 0) {
+        setStatusPreview([]);
+        return;
+      }
+
+      setLoadingPreview(true);
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+        
+        // Coletar O.S. ou boletins
+        let numbers: string[] = [];
+        let checkEndpoint = "";
+        
+        if (tipoEnvio === "prestador") {
+          numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
+          checkEndpoint = "/blacklist/os/check";
+        } else {
+          numbers = dataParaEnvio.map(item => item.identificador_boletim_montagem).filter(Boolean);
+          checkEndpoint = "/blacklist/boletins/check";
+        }
+
+        if (numbers.length === 0) {
+          setStatusPreview([]);
+          return;
+        }
+
+        // Verificar blacklist
+        const blacklistResponse = await fetch(`${API_BASE_URL}${checkEndpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ numbers }),
+        });
+
+        const blacklisted = blacklistResponse.ok ? await blacklistResponse.json() : [];
+
+        // Verificar O.S. já enviadas (para prestador)
+        let alreadySent: string[] = [];
+        if (tipoEnvio === "prestador") {
+          const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ os_numbers: numbers }),
+          });
+          alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+        } else {
+          // Verificar boletins já enviados (para montador)
+          const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ boletins: numbers }),
+          });
+          alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+        }
+
+        // Criar preview de status
+        const preview = numbers.map(num => {
+          if (blacklisted.includes(num)) {
+            return { number: num, status: "Na blacklist", color: "red" };
+          }
+          if (alreadySent.includes(num)) {
+            return { number: num, status: "Já enviado", color: "orange" };
+          }
+          return { number: num, status: "Pendente", color: "green" };
+        });
+
+        setStatusPreview(preview);
+      } catch (error) {
+        console.error("Erro ao verificar status:", error);
+      } finally {
+        setLoadingPreview(false);
+      }
+    };
+
+    verificarStatus();
+  }, [dataParaEnvio, tipoEnvio]);
 
   // Auto preencher com dados de teste
   const autoPreencherPrestador = () => {
@@ -371,10 +454,29 @@ Qualquer dúvida, estamos à disposição.`,
       if (response.ok) {
         const result = await response.json();
         
+        // Mostrar status de cada O.S./boletim
+        if (result.os_status && result.os_status.length > 0) {
+          console.log("📊 Status das O.S./Boletins:");
+          console.table(result.os_status);
+          
+          // Contar status
+          const statusCount = result.os_status.reduce((acc: any, item: any) => {
+            acc[item.status] = (acc[item.status] || 0) + 1;
+            return acc;
+          }, {});
+          
+          console.log("📈 Resumo:", statusCount);
+        }
+        
+        // Mensagens de feedback
         if (result.message) {
           toast.success(result.message);
-        } else {
-          toast.success(`✅ ${result.sucesso} relatórios processados com sucesso!`);
+        } else if (result.sucesso > 0) {
+          toast.success(`✅ ${result.sucesso} relatórios enviados com sucesso!`);
+        }
+        
+        if (result.ignorados > 0) {
+          toast.warning(`⚠️ ${result.ignorados} itens ignorados (já enviados ou na blacklist)`);
         }
         
         if (result.warning) {
@@ -383,6 +485,7 @@ Qualquer dúvida, estamos à disposição.`,
         
         if (result.erros > 0 && result.detalhes_erros) {
           console.error("Erros detalhados:", result.detalhes_erros);
+          toast.error(`❌ ${result.erros} envios falharam. Verifique o console.`);
         }
 
         // Limpar dados
@@ -869,7 +972,80 @@ Qualquer dúvida, estamos à disposição.`,
 
       {/* Configurações de Envio */}
       {dataParaEnvio.length > 0 && (
-        <Card>
+        <>
+          {/* Preview de Status */}
+          {statusPreview.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  📊 Status das {tipoEnvio === "prestador" ? "O.S." : "Boletins"}
+                </CardTitle>
+                <CardDescription>
+                  Visualize o status de cada item antes do envio
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingPreview ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-4 mb-4">
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                        ✓ Pendentes: {statusPreview.filter(s => s.status === "Pendente").length}
+                      </Badge>
+                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                        ⚠ Já enviados: {statusPreview.filter(s => s.status === "Já enviado").length}
+                      </Badge>
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
+                        ✕ Na blacklist: {statusPreview.filter(s => s.status === "Na blacklist").length}
+                      </Badge>
+                    </div>
+                    
+                    <div className="rounded-md border max-h-64 overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{tipoEnvio === "prestador" ? "O.S." : "Boletim"}</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {statusPreview.map((item, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                <Badge variant="outline">{item.number}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {item.status === "Pendente" && (
+                                  <Badge className="bg-green-50 text-green-700 border-green-300">
+                                    ✓ {item.status}
+                                  </Badge>
+                                )}
+                                {item.status === "Já enviado" && (
+                                  <Badge className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                    ⚠ {item.status}
+                                  </Badge>
+                                )}
+                                {item.status === "Na blacklist" && (
+                                  <Badge className="bg-red-50 text-red-700 border-red-300">
+                                    ✕ {item.status}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
@@ -932,6 +1108,7 @@ Qualquer dúvida, estamos à disposição.`,
             </Button>
           </CardContent>
         </Card>
+        </>
       )}
     </div>
   );

@@ -1,15 +1,165 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Play, Square, RotateCw, Save, Activity, Clock, TrendingUp } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { jobsService } from '@/services/jobs.service';
-import { toast } from 'sonner';
+
+export default function Jobs() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const executarJob = async () => {
+    setLoading(true);
+    try {
+      await jobsService.executarConsultaNotas();
+      toast({ title: 'Sucesso', description: 'Job iniciado!' });
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro', 
+        description: error?.message || 'Erro ao executar job',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Jobs Automáticos</h1>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>Execução Manual - Consulta de Notas Fiscais</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={executarJob} disabled={loading}>
+            {loading ? 'Executando...' : 'Executar Job'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+  const carregarResultado = async () => {
+    try {
+      const data = await jobsService.getResultadoConsultaNotas();
+      setResultado(data);
+      setExecutando(data.status === 'running');
+    } catch (error) {
+      console.error('Erro ao carregar resultado:', error);
+    }
+  };
+
+  useEffect(() => {
+    carregarResultado();
+    
+    // Atualizar a cada 5 segundos se estiver executando
+    const interval = setInterval(() => {
+      if (executando) {
+        carregarResultado();
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [executando]);
+
+  const handleExecutar = async () => {
+    setCarregando(true);
+    try {
+      await jobsService.executarConsultaNotas();
+      toast({ title: 'Sucesso', description: 'Job iniciado com sucesso!' });
+      setExecutando(true);
+      setTimeout(carregarResultado, 2000);
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro', 
+        description: error?.response?.data?.detail || 'Erro ao iniciar job',
+        variant: 'destructive'
+      });
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Verifica uploads pendentes na API externa e cria cards no Trello
+          </p>
+        </div>
+        <Button 
+          onClick={handleExecutar} 
+          disabled={executando || carregando}
+        >
+          <Play className="h-4 w-4 mr-2" />
+          {executando ? 'Executando...' : 'Executar Agora'}
+        </Button>
+      </div>
+
+      {resultado && resultado.status !== 'never_run' && (
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Último Resultado</h4>
+            {resultado.status === 'running' ? (
+              <Badge className="bg-blue-600">
+                <Activity className="h-3 w-3 mr-1 animate-pulse" />
+                Executando
+              </Badge>
+            ) : resultado.error ? (
+              <Badge variant="destructive">
+                <XCircle className="h-3 w-3 mr-1" />
+                Erro
+              </Badge>
+            ) : (
+              <Badge className="bg-green-600">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Concluído
+              </Badge>
+            )}
+          </div>
+
+          {resultado.last_run && (
+            <p className="text-sm text-muted-foreground">
+              Executado em: {new Date(resultado.last_run).toLocaleString('pt-BR')}
+            </p>
+          )}
+
+          {resultado.result && (
+            <div className="grid grid-cols-4 gap-4 pt-2">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Processados</p>
+                <p className="text-2xl font-bold">{resultado.result.total_processados}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Arquivos</p>
+                <p className="text-2xl font-bold">{resultado.result.arquivos_encontrados}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Downloads</p>
+                <p className="text-2xl font-bold text-green-600">{resultado.result.downloads}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Erros</p>
+                <p className="text-2xl font-bold text-red-600">{resultado.result.erros}</p>
+              </div>
+            </div>
+          )}
+
+          {resultado.error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+              <strong>Erro:</strong> {resultado.error}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface JobConfig {
   id: number;
@@ -30,6 +180,8 @@ interface ServiceStatus {
 }
 
 export default function Jobs() {
+  console.log('🔍 Jobs component mounted');
+  const { toast } = useToast();
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({ running: false, pid: null });
   const [jobs, setJobs] = useState<JobConfig[]>([]);
   const [logs, setLogs] = useState<string>('');
@@ -37,11 +189,13 @@ export default function Jobs() {
   const [jobConfigs, setJobConfigs] = useState<Record<number, { ativo: boolean; intervalo: number }>>({});
 
   const loadServiceStatus = async () => {
+    console.log('📊 Loading service status...');
     try {
-      const status: any = await jobsService.getStatus();
+      const status = await jobsService.getSchedulerStatus();
+      console.log('✅ Status loaded:', status);
       setServiceStatus(status);
     } catch (error) {
-      console.error('Erro ao carregar status:', error);
+      console.error('❌ Erro ao carregar status:', error);
     }
   };
 
@@ -92,14 +246,18 @@ export default function Jobs() {
   const handleStartService = async () => {
     setLoading(true);
     try {
-      await jobsService.startService();
-      toast.success('Serviço iniciado com sucesso!');
+      await jobsService.startScheduler();
+      toast({ title: 'Sucesso', description: 'Serviço iniciado com sucesso!' });
       setTimeout(() => {
         loadServiceStatus();
         loadJobs();
       }, 2000);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao iniciar serviço');
+      toast({ 
+        title: 'Erro', 
+        description: error.message || 'Erro ao iniciar serviço',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -108,13 +266,17 @@ export default function Jobs() {
   const handleStopService = async () => {
     setLoading(true);
     try {
-      await jobsService.stopService();
-      toast.success('Serviço parado com sucesso!');
+      await jobsService.stopScheduler();
+      toast({ title: 'Sucesso', description: 'Serviço parado com sucesso!' });
       setTimeout(() => {
         loadServiceStatus();
       }, 1000);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao parar serviço');
+      toast({ 
+        title: 'Erro', 
+        description: error.message || 'Erro ao parar serviço',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -123,13 +285,17 @@ export default function Jobs() {
   const handleReloadService = async () => {
     setLoading(true);
     try {
-      await jobsService.reloadService();
-      toast.success('Configurações recarregadas!');
+      await jobsService.reloadScheduler();
+      toast({ title: 'Sucesso', description: 'Configurações recarregadas!' });
       setTimeout(() => {
         loadJobs();
       }, 1000);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao recarregar configurações');
+      toast({ 
+        title: 'Erro', 
+        description: error.message || 'Erro ao recarregar configurações',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -140,7 +306,7 @@ export default function Jobs() {
     if (!config) return;
     
     if (config.ativo === job.ativo && config.intervalo === job.intervalo_minutos) {
-      toast.info('Nenhuma alteração detectada');
+      toast({ description: 'Nenhuma alteração detectada' });
       return;
     }
     
@@ -149,18 +315,22 @@ export default function Jobs() {
         ativo: config.ativo,
         intervalo_minutos: config.intervalo
       });
-      toast.success('Configurações salvas!');
+      toast({ title: 'Sucesso', description: 'Configurações salvas!' });
       
       if (serviceStatus.running) {
-        toast.info('Recarregando serviço...');
+        toast({ description: 'Recarregando serviço...' });
         await handleReloadService();
       } else {
-        toast.warning('Inicie o serviço para aplicar as mudanças');
+        toast({ description: 'Inicie o serviço para aplicar as mudanças' });
       }
       
       loadJobs();
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao salvar configurações');
+      toast({ 
+        title: 'Erro', 
+        description: error.message || 'Erro ao salvar configurações',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -195,6 +365,8 @@ export default function Jobs() {
     return ((job.total_execucoes - job.total_erros) / job.total_execucoes) * 100;
   };
 
+  console.log('🔍 About to render. Jobs:', jobs.length, 'Loading:', loading);
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -203,6 +375,19 @@ export default function Jobs() {
           <p className="text-muted-foreground">Gerencie e monitore tarefas agendadas</p>
         </div>
       </div>
+
+      {/* Execução Manual - Job Consulta Notas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Execução Manual - Consulta de Notas Fiscais</CardTitle>
+          <CardDescription>
+            Execute o job de consulta e download de notas fiscais manualmente
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ConsultaNotasControl />
+        </CardContent>
+      </Card>
 
       {/* Status do Serviço */}
       <Card>

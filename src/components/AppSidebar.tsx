@@ -43,6 +43,7 @@ const menuItems = [
     title: "Relatórios",
     items: [
       { title: "Envio de Relatórios", url: "/envio-relatorios", icon: FileText },
+      { title: "Envio de Montadores", url: "/envio-montadores", icon: Wrench },
       { title: "Histórico de Envios", url: "/historico-envios", icon: Clock },
     ],
   },

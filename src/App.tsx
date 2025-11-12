@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Prestadores from "./pages/Prestadores";
 import Montadores from "./pages/Montadores";
 import EnvioRelatorios from "./pages/EnvioRelatorios";
+import EnvioRelatoriosMontadores from "./pages/EnvioRelatoriosMontadores";
 import HistoricoEnvios from "./pages/HistoricoEnvios";
 import PagamentosVencidos from "./pages/PagamentosVencidos";
 import WhatsApp from "./pages/WhatsApp";
@@ -36,6 +37,7 @@ const App = () => (
                   <Route path="/prestadores" element={<Prestadores />} />
                   <Route path="/montadores" element={<Montadores />} />
                   <Route path="/envio-relatorios" element={<EnvioRelatorios />} />
+                  <Route path="/envio-montadores" element={<EnvioRelatoriosMontadores />} />
                   <Route path="/historico-envios" element={<HistoricoEnvios />} />
                   <Route path="/pagamentos-vencidos" element={<PagamentosVencidos />} />
                   <Route path="/whatsapp" element={<WhatsApp />} />

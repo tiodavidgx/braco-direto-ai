@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, FileText, Download, Eye, Mail, MessageSquare } from "lucide-react";
+import { Search, FileText, Download, Eye, Mail, MessageSquare, Loader2, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,64 +27,111 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+
+interface HistoricoItem {
+  id: number;
+  tipo: string;
+  prestador_nome?: string;
+  montador_nome?: string;
+  periodo: string;
+  valor_total: number;
+  quantidade_os: number;
+  data_envio: string;
+  status: string;
+  link_upload?: string;
+  validade_link?: string;
+  status_api?: number;
+  nota_fiscal_path?: string;
+}
 
 export default function HistoricoEnvios() {
   const [tipoFiltro, setTipoFiltro] = useState<"todos" | "prestador" | "montador">("todos");
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [searchTerm, setSearchTerm] = useState("");
+  const [historico, setHistorico] = useState<HistoricoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openDialogId, setOpenDialogId] = useState<number | null>(null);
 
-  // Mock data - substituir por dados reais da API
-  const historico = [
-    {
-      id: 1,
-      tipo: "prestador",
-      loteId: 101,
-      nome: "Prestadora ABC Ltda",
-      periodo: "01/11/2025 - 07/11/2025",
-      valorTotal: 15480.5,
-      quantidadeOS: 12,
-      dataEnvio: "2025-11-08T10:30:00",
-      status: "Aguardando NF",
-      emailEnviado: true,
-      whatsappEnviado: true,
-      linkUpload: "https://api.link.dev.br/upload/abc123",
-    },
-    {
-      id: 2,
-      tipo: "montador",
-      loteId: 201,
-      nome: "João Silva",
-      periodo: "Novembro/2025",
-      valorTotal: 3250.0,
-      quantidadeOS: 8,
-      dataEnvio: "2025-11-05T14:20:00",
-      status: "Pago",
-      emailEnviado: true,
-      whatsappEnviado: false,
-      linkUpload: null,
-    },
-    {
-      id: 3,
-      tipo: "prestador",
-      loteId: 102,
-      nome: "Serviços XYZ",
-      periodo: "15/10/2025 - 31/10/2025",
-      valorTotal: 8500.0,
-      quantidadeOS: 7,
-      dataEnvio: "2025-11-01T09:15:00",
-      status: "N.F. RECEBIDA",
-      emailEnviado: true,
-      whatsappEnviado: true,
-      linkUpload: "https://api.link.dev.br/upload/xyz456",
-    },
-  ];
+  // Carregar histórico da API
+  useEffect(() => {
+    const loadHistorico = async () => {
+      try {
+        setLoading(true);
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+        
+        // Montar query params
+        const params = new URLSearchParams();
+        if (tipoFiltro !== "todos") {
+          params.append("tipo", tipoFiltro);
+        }
+        if (statusFiltro !== "todos") {
+          params.append("status", statusFiltro);
+        }
+        
+        const url = `${API_BASE_URL}/relatorios/historico${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await fetch(url);
+
+        if (response.ok) {
+          const data = await response.json();
+          setHistorico(data);
+        } else {
+          toast.error("Erro ao carregar histórico");
+        }
+      } catch (error) {
+        console.error("Erro ao carregar histórico:", error);
+        toast.error("Erro ao carregar histórico");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHistorico();
+  }, [tipoFiltro, statusFiltro]);
 
   const filteredData = historico.filter((item) => {
-    const matchTipo = tipoFiltro === "todos" || item.tipo === tipoFiltro;
-    const matchStatus = statusFiltro === "todos" || item.status === statusFiltro;
-    const matchSearch = item.nome.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchTipo && matchStatus && matchSearch;
+    const nome = item.prestador_nome || item.montador_nome || "";
+    const matchSearch = nome.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchSearch;
   });
+
+  const handleDelete = async (id: number, tipo: string) => {
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const endpoint = tipo === "prestador" 
+        ? `${API_BASE_URL}/relatorios/historico-envios/prestador/${id}`
+        : `${API_BASE_URL}/relatorios/historico-envios/montador/${id}`;
+      
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast.success(`${tipo === "prestador" ? "Lote" : "Envio"} excluído com sucesso!`);
+        // Fechar o dialog
+        setOpenDialogId(null);
+        // Recarregar histórico
+        setHistorico(prevHistorico => prevHistorico.filter(item => item.id !== id));
+      } else {
+        const error = await response.json();
+        toast.error(error.detail || "Erro ao excluir");
+      }
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      toast.error("Erro ao excluir registro");
+    }
+  };
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -151,7 +198,12 @@ export default function HistoricoEnvios() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredData.length === 0 ? (
+            {loading ? (
+              <div className="py-12 text-center">
+                <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin text-primary" />
+                <p className="text-muted-foreground">Carregando histórico...</p>
+              </div>
+            ) : filteredData.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground">
                 <FileText className="mx-auto h-12 w-12 mb-4" />
                 <p>Nenhum envio encontrado com os filtros selecionados</p>
@@ -168,38 +220,41 @@ export default function HistoricoEnvios() {
                     <TableHead>Valor Total</TableHead>
                     <TableHead>Data Envio</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Canais</TableHead>
+                    <TableHead>Upload</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredData.map((item) => (
+                  {filteredData.map((item) => {
+                    const nome = item.prestador_nome || item.montador_nome || "N/A";
+                    
+                    return (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <Badge variant="outline">#{item.loteId}</Badge>
+                        <Badge variant="outline">#{item.id}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={item.tipo === "prestador" ? "default" : "secondary"}>
                           {item.tipo === "prestador" ? "🔧 Prestador" : "🔨 Montador"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{item.nome}</TableCell>
+                      <TableCell className="font-medium">{nome}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {item.periodo}
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{item.quantidadeOS}</span>
+                        <span className="text-sm">{item.quantidade_os}</span>
                       </TableCell>
                       <TableCell>
                         <span className="font-semibold">
-                          R$ {item.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          R$ {item.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {new Date(item.dataEnvio).toLocaleDateString("pt-BR")}
+                        {new Date(item.data_envio).toLocaleDateString("pt-BR")}
                         <br />
                         <span className="text-xs text-muted-foreground">
-                          {new Date(item.dataEnvio).toLocaleTimeString("pt-BR", {
+                          {new Date(item.data_envio).toLocaleTimeString("pt-BR", {
                             hour: "2-digit",
                             minute: "2-digit",
                           })}
@@ -213,23 +268,28 @@ export default function HistoricoEnvios() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          {item.emailEnviado && (
-                            <div className="flex items-center gap-1">
-                              <Mail className="h-4 w-4 text-success" />
-                              <span className="text-xs text-muted-foreground">Email</span>
-                            </div>
-                          )}
-                          {item.whatsappEnviado && (
-                            <div className="flex items-center gap-1">
-                              <MessageSquare className="h-4 w-4 text-success" />
-                              <span className="text-xs text-muted-foreground">WhatsApp</span>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                          {item.link_upload ? (
+                            <>
+                              {item.status_api === 1 ? (
+                                <Badge className="bg-green-50 text-green-700 border-green-300">
+                                  ✅ N.F. Recebida
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-blue-50 text-blue-700 border-blue-300">
+                                  📤 Link enviado
+                                </Badge>
+                              )}
+                            </>
+                          ) : (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                              ⏳ Aguardando
+                            </Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Dialog>
+                        <Dialog open={openDialogId === item.id} onOpenChange={(open) => setOpenDialogId(open ? item.id : null)}>
                           <DialogTrigger asChild>
                             <Button variant="ghost" size="sm">
                               <Eye className="h-4 w-4" />
@@ -237,9 +297,9 @@ export default function HistoricoEnvios() {
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl">
                             <DialogHeader>
-                              <DialogTitle>Detalhes do Envio #{item.loteId}</DialogTitle>
+                              <DialogTitle>Detalhes do Envio #{item.id}</DialogTitle>
                               <DialogDescription>
-                                {item.nome} - {item.periodo}
+                                {nome} - {item.periodo}
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
@@ -257,23 +317,35 @@ export default function HistoricoEnvios() {
                                 <div>
                                   <p className="text-sm font-medium text-muted-foreground">Valor Total</p>
                                   <p className="text-lg font-bold text-primary">
-                                    R$ {item.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                    R$ {item.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                                   </p>
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-muted-foreground">Quantidade</p>
                                   <p className="text-base font-semibold">
-                                    {item.quantidadeOS} {item.tipo === "prestador" ? "OS" : "montagens"}
+                                    {item.quantidade_os} {item.tipo === "prestador" ? "OS" : "montagens"}
                                   </p>
                                 </div>
                               </div>
 
-                              {item.linkUpload && (
+                              {item.link_upload && (
                                 <div className="rounded-lg border border-border bg-muted/50 p-4">
                                   <p className="text-sm font-medium mb-2">🔗 Link de Upload</p>
                                   <code className="block text-xs bg-background p-2 rounded break-all">
-                                    {item.linkUpload}
+                                    {item.link_upload}
                                   </code>
+                                  {item.validade_link && (
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                      Válido até: {new Date(item.validade_link).toLocaleDateString("pt-BR")}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {item.nota_fiscal_path && (
+                                <div className="rounded-lg border border-success bg-green-50 p-4">
+                                  <p className="text-sm font-medium text-green-700">✅ Nota Fiscal Recebida</p>
+                                  <p className="text-xs text-muted-foreground mt-1">{item.nota_fiscal_path}</p>
                                 </div>
                               )}
 
@@ -286,13 +358,41 @@ export default function HistoricoEnvios() {
                                   <Mail className="h-4 w-4" />
                                   Reenviar Email
                                 </Button>
+                                
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" className="flex-1 gap-2">
+                                      <Trash2 className="h-4 w-4" />
+                                      Excluir
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Tem certeza que deseja excluir este {item.tipo === "prestador" ? "lote" : "envio"}? 
+                                        {item.tipo === "prestador" && " Todas as O.S. relacionadas também serão excluídas."}
+                                        {" "}Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleDelete(item.id, item.tipo)}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
                             </div>
                           </DialogContent>
                         </Dialog>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}

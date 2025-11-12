@@ -7,19 +7,24 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, TestTube, ExternalLink } from "lucide-react";
-import { integracoesService } from "@/services/integracoes.service";
+import { integracoesService, TrelloConfig, TrelloBoard, TrelloLista } from "@/services/integracoes.service";
 
 export default function Integracoes() {
   const { toast } = useToast();
-  const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [token, setToken] = useState("");
-  const [boardId, setBoardId] = useState("");
-  const [listId, setListId] = useState("");
-  const [ativo, setAtivo] = useState(false);
+  const [config, setConfig] = useState<TrelloConfig>({
+    api_key: "",
+    token: "",
+    board_id: "",
+    lista_id: "",
+    ativo: false,
+  });
+  const [boards, setBoards] = useState<TrelloBoard[]>([]);
+  const [listas, setListas] = useState<TrelloLista[]>([]);
+  const [testando, setTestando] = useState(false);
 
   useEffect(() => {
     carregarConfig();
@@ -27,47 +32,58 @@ export default function Integracoes() {
 
   const carregarConfig = async () => {
     try {
-      const data: any = await integracoesService.getTrelloConfig();
+      const data = await integracoesService.getTrelloConfig();
       setConfig(data);
-      setApiKey(data.trello_api_key || "");
-      setToken(data.trello_token || "");
-      setBoardId(data.trello_board_id || "");
-      setListId(data.trello_list_id || "");
-      setAtivo(data.trello_ativo || false);
+      
+      // Se já tem credenciais, carregar boards
+      if (data.api_key && data.token) {
+        carregarBoards(data.api_key, data.token);
+      }
+      
+      // Se já tem board selecionado, carregar listas
+      if (data.board_id && data.api_key && data.token) {
+        carregarListas(data.board_id, data.api_key, data.token);
+      }
     } catch (error) {
       console.error("Erro ao carregar config:", error);
     }
   };
 
-  const salvarConfig = async () => {
-    setLoading(true);
+  const carregarBoards = async (apiKey: string, token: string) => {
     try {
-      await integracoesService.saveTrelloConfig({
-        trello_api_key: apiKey,
-        trello_token: token,
-        trello_board_id: boardId,
-        trello_list_id: listId,
-        trello_ativo: ativo,
-      });
-      toast({ title: "Sucesso", description: "Configuração salva!" });
-      carregarConfig();
+      const data = await integracoesService.getTrelloBoards(apiKey, token);
+      setBoards(data);
     } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao salvar configuração",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      console.error("Erro ao carregar boards:", error);
+    }
+  };
+
+  const carregarListas = async (boardId: string, apiKey: string, token: string) => {
+    try {
+      const data = await integracoesService.getTrelloListas(boardId, apiKey, token);
+      setListas(data);
+    } catch (error: any) {
+      console.error("Erro ao carregar listas:", error);
     }
   };
 
   const testarConexao = async () => {
-    setLoading(true);
+    if (!config.api_key || !config.token) {
+      toast({
+        title: "Erro",
+        description: "Preencha API Key e Token primeiro",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTestando(true);
     try {
-      const result: any = await integracoesService.testTrelloConnection();
+      const result = await integracoesService.testTrelloConnection(config.api_key, config.token);
+      
       if (result.success) {
-        toast({ title: "Sucesso", description: "Conexão OK!" });
+        toast({ title: "Sucesso", description: "Conexão OK! Carregando boards..." });
+        await carregarBoards(config.api_key, config.token);
       } else {
         toast({
           title: "Erro",
@@ -82,7 +98,49 @@ export default function Integracoes() {
         variant: "destructive",
       });
     } finally {
+      setTestando(false);
+    }
+  };
+
+  const salvarConfig = async () => {
+    if (!config.api_key || !config.token) {
+      toast({
+        title: "Erro",
+        description: "Preencha API Key e Token",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!config.board_id || !config.lista_id) {
+      toast({
+        title: "Erro",
+        description: "Selecione um Board e uma Lista",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await integracoesService.saveTrelloConfig(config);
+      toast({ title: "Sucesso", description: "Configuração salva!" });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao salvar configuração",
+        variant: "destructive",
+      });
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBoardChange = (boardId: string) => {
+    setConfig({ ...config, board_id: boardId, lista_id: "" });
+    setListas([]);
+    if (config.api_key && config.token) {
+      carregarListas(boardId, config.api_key, config.token);
     }
   };
 
@@ -147,8 +205,8 @@ export default function Integracoes() {
                     <Input
                       id="apiKey"
                       type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
+                      value={config.api_key}
+                      onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
                       placeholder="Sua chave de API do Trello"
                     />
                   </div>
@@ -158,12 +216,21 @@ export default function Integracoes() {
                     <Input
                       id="token"
                       type="password"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
+                      value={config.token}
+                      onChange={(e) => setConfig({ ...config, token: e.target.value })}
                       placeholder="Seu token de autorização"
                     />
                   </div>
                 </div>
+
+                <Button 
+                  variant="outline" 
+                  onClick={testarConexao} 
+                  disabled={testando || !config.api_key || !config.token}
+                >
+                  <TestTube className="mr-2 h-4 w-4" />
+                  {testando ? "Testando..." : "Testar Conexão"}
+                </Button>
               </div>
 
               <Separator />
@@ -172,23 +239,43 @@ export default function Integracoes() {
                 <h3 className="font-semibold">Destino dos Cards</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="boardId">Board ID</Label>
-                    <Input
-                      id="boardId"
-                      value={boardId}
-                      onChange={(e) => setBoardId(e.target.value)}
-                      placeholder="ID do board"
-                    />
+                    <Label htmlFor="board">Board</Label>
+                    <Select
+                      value={config.board_id}
+                      onValueChange={handleBoardChange}
+                      disabled={boards.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um board" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {boards.map((board) => (
+                          <SelectItem key={board.id} value={board.id}>
+                            {board.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="listId">List ID</Label>
-                    <Input
-                      id="listId"
-                      value={listId}
-                      onChange={(e) => setListId(e.target.value)}
-                      placeholder="ID da lista"
-                    />
+                    <Label htmlFor="lista">Lista</Label>
+                    <Select
+                      value={config.lista_id}
+                      onValueChange={(value) => setConfig({ ...config, lista_id: value })}
+                      disabled={listas.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma lista" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {listas.map((lista) => (
+                          <SelectItem key={lista.id} value={lista.id}>
+                            {lista.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -204,33 +291,16 @@ export default function Integracoes() {
                 </div>
                 <Switch
                   id="ativo"
-                  checked={ativo}
-                  onCheckedChange={setAtivo}
+                  checked={config.ativo}
+                  onCheckedChange={(checked) => setConfig({ ...config, ativo: checked })}
                 />
               </div>
 
               <Separator />
 
-              <div className="flex gap-2">
-                <Button onClick={salvarConfig} disabled={loading}>
-                  Salvar Configuração
-                </Button>
-                <Button variant="outline" onClick={testarConexao} disabled={loading}>
-                  <TestTube className="mr-2 h-4 w-4" />
-                  Testar Conexão
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Histórico de Cards Criados</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-center text-muted-foreground py-8">
-                Nenhum card criado ainda
-              </p>
+              <Button onClick={salvarConfig} disabled={loading}>
+                Salvar Configuração
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

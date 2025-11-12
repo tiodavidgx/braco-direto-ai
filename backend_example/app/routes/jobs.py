@@ -1,7 +1,12 @@
+"""
+Rotas para gerenciar Jobs e tarefas agendadas
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-import psycopg2
+from typing import Optional, Dict, Any
+import threading
+from datetime import datetime
 from pathlib import Path
 import os
 import signal
@@ -10,14 +15,91 @@ from ..database import get_db_connection
 
 router = APIRouter()
 
+# Estado dos jobs em execução (em memória)
+job_status = {
+    'consulta_notas': {
+        'running': False,
+        'last_run': None,
+        'last_result': None,
+        'error': None
+    }
+}
+
 
 class JobUpdate(BaseModel):
     ativo: bool
     intervalo_minutos: int
 
 
+# ===== ENDPOINTS PARA EXECUÇÃO MANUAL DE JOBS =====
+
 @router.get("/status")
-def get_status():
+async def get_jobs_status():
+    """Retorna status de todos os jobs em execução"""
+    return job_status
+
+
+@router.post("/consulta-notas/executar")
+async def executar_job_consulta_notas():
+    """Executa o job de consulta de notas fiscais manualmente"""
+    
+    if job_status['consulta_notas']['running']:
+        raise HTTPException(status_code=409, detail="Job já está em execução")
+    
+    try:
+        # Executar em thread separada
+        def run_job():
+            from app.jobs.consultar_notas import processar_uploads_pendentes
+            
+            job_status['consulta_notas']['running'] = True
+            job_status['consulta_notas']['error'] = None
+            
+            try:
+                result = processar_uploads_pendentes()
+                job_status['consulta_notas']['last_result'] = result
+                job_status['consulta_notas']['last_run'] = datetime.now().isoformat()
+            except Exception as e:
+                job_status['consulta_notas']['error'] = str(e)
+            finally:
+                job_status['consulta_notas']['running'] = False
+        
+        thread = threading.Thread(target=run_job, daemon=True)
+        thread.start()
+        
+        return {
+            "success": True,
+            "message": "Job iniciado com sucesso",
+            "status": "running"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao iniciar job: {str(e)}")
+
+
+@router.get("/consulta-notas/resultado")
+async def get_resultado_consulta_notas():
+    """Retorna o resultado do último job executado"""
+    
+    status = job_status['consulta_notas']
+    
+    if not status['last_run'] and not status['running']:
+        return {
+            "status": "never_run",
+            "message": "Job nunca foi executado"
+        }
+    
+    return {
+        "status": "running" if status['running'] else "completed",
+        "last_run": status['last_run'],
+        "result": status['last_result'],
+        "error": status['error']
+    }
+
+
+# ===== ENDPOINTS PARA SCHEDULER (processo externo) =====
+
+@router.get("/scheduler/status")
+def get_scheduler_status():
     """Verifica status do serviço scheduler"""
     pid_file = Path('scheduler.pid')
     
@@ -43,8 +125,8 @@ def get_status():
         return {"running": False, "pid": None, "error": str(e)}
 
 
-@router.post("/start")
-def start_service():
+@router.post("/scheduler/start")
+def start_scheduler():
     """Inicia o serviço scheduler"""
     pid_file = Path('scheduler.pid')
     
@@ -84,8 +166,8 @@ def start_service():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stop")
-def stop_service():
+@router.post("/scheduler/stop")
+def stop_scheduler():
     """Para o serviço scheduler"""
     pid_file = Path('scheduler.pid')
     
@@ -124,8 +206,8 @@ def stop_service():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/reload")
-def reload_service():
+@router.post("/scheduler/reload")
+def reload_scheduler():
     """Recarrega configurações do scheduler"""
     pid_file = Path('scheduler.pid')
     
@@ -143,6 +225,8 @@ def reload_service():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ===== ENDPOINTS PARA CONFIGURAÇÃO DE JOBS =====
 
 @router.get("/config")
 def get_jobs_config():
@@ -203,7 +287,7 @@ def update_job_config(job_name: str, update: JobUpdate):
 
 
 @router.get("/logs")
-def get_logs():
+def get_scheduler_logs():
     """Retorna logs recentes do scheduler"""
     log_file = Path('scheduler.log')
     
