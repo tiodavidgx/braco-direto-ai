@@ -19,6 +19,9 @@ requests==2.31.0
 # Geração de PDFs
 reportlab==4.0.7
 
+# Agendamento de jobs
+APScheduler==3.10.4
+
 # Testes
 pytest==7.4.3
 pytest-cov==4.1.0

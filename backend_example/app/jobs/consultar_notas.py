@@ -39,6 +39,13 @@ def get_lotes_upload_pendente() -> List[Dict[str, Any]]:
         import psycopg2.extras
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
+        # Primeiro garantir que a coluna upload_hash existe
+        cur.execute("""
+            ALTER TABLE lotes_servico 
+            ADD COLUMN IF NOT EXISTS upload_hash TEXT
+        """)
+        conn.commit()
+        
         cur.execute("""
             SELECT 
                 l.id,
@@ -47,13 +54,14 @@ def get_lotes_upload_pendente() -> List[Dict[str, Any]]:
                 l.periodo,
                 l.valor_total,
                 l.link_upload,
-                l.id_controle as upload_hash,
+                l.upload_hash,
+                l.id_controle,
                 l.status_api,
                 l.status_arquivo,
                 l.data_envio
             FROM lotes_servico l
             WHERE l.link_upload IS NOT NULL
-            AND l.id_controle IS NOT NULL
+            AND (l.upload_hash IS NOT NULL OR l.id_controle IS NOT NULL)
             AND (l.status_arquivo IS NULL OR l.status_arquivo < 2)
             ORDER BY l.data_envio DESC
         """)
@@ -67,6 +75,13 @@ def get_envios_montagem_upload_pendente() -> List[Dict[str, Any]]:
         import psycopg2.extras
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
+        # Primeiro garantir que a coluna upload_hash existe
+        cur.execute("""
+            ALTER TABLE envios_montagem 
+            ADD COLUMN IF NOT EXISTS upload_hash TEXT
+        """)
+        conn.commit()
+        
         cur.execute("""
             SELECT 
                 e.id,
@@ -75,12 +90,13 @@ def get_envios_montagem_upload_pendente() -> List[Dict[str, Any]]:
                 e.periodo,
                 e.valor_total,
                 e.link_upload,
-                e.id_controle as upload_hash,
+                e.upload_hash,
+                e.id_controle,
                 e.status_api,
                 e.data_envio
             FROM envios_montagem e
             WHERE e.link_upload IS NOT NULL
-            AND e.id_controle IS NOT NULL
+            AND (e.upload_hash IS NOT NULL OR e.id_controle IS NOT NULL)
             AND (e.status_api IS NULL OR e.status_api < 2)
             ORDER BY e.data_envio DESC
         """)
@@ -92,6 +108,15 @@ def salvar_arquivos_nf(lote_id: int, arquivos: List[Dict], stats: Dict):
     """Salva informações dos arquivos no banco"""
     with get_db_connection() as conn:
         cur = conn.cursor()
+        
+        # Primeiro garantir que as colunas existem
+        cur.execute("""
+            ALTER TABLE lotes_servico 
+            ADD COLUMN IF NOT EXISTS total_arquivos_nf INTEGER,
+            ADD COLUMN IF NOT EXISTS tamanho_total_nf BIGINT,
+            ADD COLUMN IF NOT EXISTS data_ultima_consulta TIMESTAMP
+        """)
+        conn.commit()
         
         # Atualizar lote com informações dos arquivos
         cur.execute("""
@@ -207,6 +232,7 @@ def processar_uploads_pendentes():
         for lote in lotes:
             lote_id = lote['id']
             upload_hash = lote.get('upload_hash')
+            id_controle = lote.get('id_controle')
             prestador = lote['prestador_nome']
             periodo = lote['periodo']
             
@@ -215,10 +241,17 @@ def processar_uploads_pendentes():
             logger.info(f"   👤 Prestador: {prestador}")
             logger.info(f"   📅 Período: {periodo}")
             
+            # Se não tem upload_hash, tentar usar id_controle como fallback
+            if not upload_hash and id_controle:
+                upload_hash = str(id_controle)
+                logger.info(f"   ⚠️  Usando id_controle como hash (lote antigo)")
+            
             if not upload_hash:
-                logger.info(f"   ⚠️  Sem hash de upload (lote antigo)")
+                logger.info(f"   ⚠️  Sem hash de upload - pulando")
                 continue
             
+            # Garantir que upload_hash é string
+            upload_hash = str(upload_hash)
             logger.info(f"   🔑 Hash: {upload_hash[:20]}...")
             
             # Consultar status na API
@@ -313,8 +346,25 @@ def processar_uploads_pendentes():
                     )
                     logger.info(f"   🔔 Notificação criada")
                 
-                # Integração Trello
-                if not ja_tem_notificacao:
+                # Integração Trello - verificar se já existe card
+                trello_ja_criado = False
+                with get_db_connection() as conn_trello:
+                    cur_trello = conn_trello.cursor()
+                    
+                    # Adicionar coluna tipo se não existir
+                    cur_trello.execute("""
+                        ALTER TABLE trello_cards 
+                        ADD COLUMN IF NOT EXISTS tipo VARCHAR(20)
+                    """)
+                    conn_trello.commit()
+                    
+                    cur_trello.execute("""
+                        SELECT COUNT(*) FROM trello_cards 
+                        WHERE lote_id = %s
+                    """, (lote_id,))
+                    trello_ja_criado = cur_trello.fetchone()[0] > 0
+                
+                if not trello_ja_criado:
                     try:
                         trello = TrelloIntegration()
                         if trello.is_configured():
@@ -343,6 +393,8 @@ def processar_uploads_pendentes():
                             logger.info(f"   ℹ️  Integração Trello não configurada")
                     except Exception as e:
                         logger.info(f"   ⚠️  Erro ao criar card Trello: {e}")
+                else:
+                    logger.info(f"   ℹ️  Card Trello já foi criado anteriormente")
             
             elif nota['link_valido']:
                 logger.info(f"   ⏳ Aguardando upload do prestador")
@@ -354,8 +406,57 @@ def processar_uploads_pendentes():
             
             time.sleep(0.5)
         
-        # Processar envios de montadores (lógica similar)
-        # ... (por brevidade, segue a mesma lógica)
+        # ========================================
+        # PROCESSAR ENVIOS DE MONTADORES
+        # ========================================
+        
+        for envio in envios_montagem:
+            envio_id = envio['id']
+            upload_hash = envio.get('upload_hash')
+            id_controle = envio.get('id_controle')
+            montador = envio['montador_nome']
+            periodo = envio['periodo']
+            
+            logger.info(f"\n{'─'*60}")
+            logger.info(f"🔧 Envio Montagem #{envio_id}")
+            logger.info(f"   👤 Montador: {montador}")
+            logger.info(f"   📅 Período: {periodo}")
+            
+            # Se não tem upload_hash, tentar usar id_controle como fallback
+            if not upload_hash and id_controle:
+                upload_hash = str(id_controle)
+                logger.info(f"   ⚠️  Usando id_controle como hash (envio antigo)")
+            
+            if not upload_hash:
+                logger.info(f"   ⚠️  Sem hash de upload - pulando")
+                continue
+            
+            # Garantir que upload_hash é string
+            upload_hash = str(upload_hash)
+            logger.info(f"   🔑 Hash: {upload_hash[:20]}...")
+            
+            # Consultar status na API
+            logger.info(f"   🔍 Consultando arquivos...")
+            sucesso, dados, erro = client.consultar_e_processar(upload_hash)
+            
+            if not sucesso:
+                logger.info(f"   ❌ Erro ao consultar: {erro}")
+                erros += 1
+                continue
+            
+            # TODO: Implementar lógica completa de download para montadores se necessário
+            # Por ora apenas logando
+            nota = dados['nota']
+            arquivos = dados['arquivos']
+            stats = dados['estatisticas']
+            
+            logger.info(f"   📊 Status: {nota['status_descricao']}")
+            logger.info(f"   📁 Arquivos encontrados: {stats['total_arquivos']}")
+            
+            if len(arquivos) > 0:
+                arquivos_encontrados += 1
+            
+            time.sleep(0.5)
         
         logger.info(f"\n{'='*60}")
         logger.info(f"✅ PROCESSAMENTO CONCLUÍDO")

@@ -20,7 +20,7 @@
 </head>
 <body>
     <div class="logo">
-        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Novo Mundo Logo">
+        {% if logo_url %}<img src="{{ logo_url }}" alt="Novo Mundo Logo">{% endif %}
     </div>
     <h1>Relatório de Pagamento de Montagem</h1>
     <div class="subheader">

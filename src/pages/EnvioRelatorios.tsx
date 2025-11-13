@@ -182,7 +182,9 @@ Qualquer dúvida, estamos à disposição.`,
           body: JSON.stringify({ numbers }),
         });
 
-        const blacklisted = blacklistResponse.ok ? await blacklistResponse.json() : [];
+        const blacklisted = blacklistResponse.ok 
+          ? (await blacklistResponse.json()).map(String) // Converter para string
+          : [];
 
         // Verificar O.S. já enviadas (para prestador)
         let alreadySent: string[] = [];
@@ -192,7 +194,9 @@ Qualquer dúvida, estamos à disposição.`,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ os_numbers: numbers }),
           });
-          alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+          alreadySent = sentResponse.ok 
+            ? (await sentResponse.json()).map(String) // Converter para string
+            : [];
         } else {
           // Verificar boletins já enviados (para montador)
           const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
@@ -200,18 +204,21 @@ Qualquer dúvida, estamos à disposição.`,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ boletins: numbers }),
           });
-          alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+          alreadySent = sentResponse.ok 
+            ? (await sentResponse.json()).map(String) // Converter para string
+            : [];
         }
 
         // Criar preview de status
         const preview = numbers.map(num => {
-          if (blacklisted.includes(num)) {
-            return { number: num, status: "Na blacklist", color: "red" };
+          const numStr = String(num); // Garantir que é string para comparação
+          if (blacklisted.includes(numStr)) {
+            return { number: numStr, status: "Na blacklist", color: "red" };
           }
-          if (alreadySent.includes(num)) {
-            return { number: num, status: "Já enviado", color: "orange" };
+          if (alreadySent.includes(numStr)) {
+            return { number: numStr, status: "Já enviado", color: "orange" };
           }
-          return { number: num, status: "Pendente", color: "green" };
+          return { number: numStr, status: "Pendente", color: "green" };
         });
 
         setStatusPreview(preview);
@@ -973,77 +980,118 @@ Qualquer dúvida, estamos à disposição.`,
       {/* Configurações de Envio */}
       {dataParaEnvio.length > 0 && (
         <>
-          {/* Preview de Status */}
-          {statusPreview.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  📊 Status das {tipoEnvio === "prestador" ? "O.S." : "Boletins"}
-                </CardTitle>
-                <CardDescription>
-                  Visualize o status de cada item antes do envio
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingPreview ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex gap-4 mb-4">
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                        ✓ Pendentes: {statusPreview.filter(s => s.status === "Pendente").length}
-                      </Badge>
-                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                        ⚠ Já enviados: {statusPreview.filter(s => s.status === "Já enviado").length}
-                      </Badge>
-                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
-                        ✕ Na blacklist: {statusPreview.filter(s => s.status === "Na blacklist").length}
-                      </Badge>
-                    </div>
+          {/* Preview de Status - SEMPRE VISÍVEL */}
+          <Card className="border-2 border-primary/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                📊 Status das {tipoEnvio === "prestador" ? "O.S." : "Boletins"}
+              </CardTitle>
+              <CardDescription>
+                Validação automática de blacklist e itens já enviados
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingPreview ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <span className="ml-3 text-muted-foreground">Verificando status...</span>
+                </div>
+              ) : statusPreview.length === 0 ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  Carregando validações...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Cards de Estatísticas - MAIS DESTACADOS */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <Card className="border-green-200 bg-green-50">
+                      <CardContent className="pt-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-green-700">
+                            {statusPreview.filter(s => s.status === "Pendente").length}
+                          </div>
+                          <div className="text-sm text-green-600 mt-1">✓ Serão Enviados</div>
+                        </div>
+                      </CardContent>
+                    </Card>
                     
-                    <div className="rounded-md border max-h-64 overflow-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>{tipoEnvio === "prestador" ? "O.S." : "Boletim"}</TableHead>
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {statusPreview.map((item, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>
-                                <Badge variant="outline">{item.number}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                {item.status === "Pendente" && (
-                                  <Badge className="bg-green-50 text-green-700 border-green-300">
-                                    ✓ {item.status}
-                                  </Badge>
-                                )}
-                                {item.status === "Já enviado" && (
-                                  <Badge className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                                    ⚠ {item.status}
-                                  </Badge>
-                                )}
-                                {item.status === "Na blacklist" && (
-                                  <Badge className="bg-red-50 text-red-700 border-red-300">
-                                    ✕ {item.status}
-                                  </Badge>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                    <Card className="border-yellow-200 bg-yellow-50">
+                      <CardContent className="pt-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-yellow-700">
+                            {statusPreview.filter(s => s.status === "Já enviado").length}
+                          </div>
+                          <div className="text-sm text-yellow-600 mt-1">⚠ Já Enviados (Ignorados)</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="border-red-200 bg-red-50">
+                      <CardContent className="pt-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-red-700">
+                            {statusPreview.filter(s => s.status === "Na blacklist").length}
+                          </div>
+                          <div className="text-sm text-red-600 mt-1">✕ Na Blacklist (Ignorados)</div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  
+                  {/* Badges de resumo */}
+                  <div className="flex gap-4 mb-4">
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                      ✓ Pendentes: {statusPreview.filter(s => s.status === "Pendente").length}
+                    </Badge>
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                      ⚠ Já enviados: {statusPreview.filter(s => s.status === "Já enviado").length}
+                    </Badge>
+                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
+                      ✕ Na blacklist: {statusPreview.filter(s => s.status === "Na blacklist").length}
+                    </Badge>
+                  </div>
+                  
+                  {/* Tabela detalhada de status */}
+                  <div className="rounded-md border max-h-64 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{tipoEnvio === "prestador" ? "O.S." : "Boletim"}</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {statusPreview.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>
+                              <Badge variant="outline">{item.number}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {item.status === "Pendente" && (
+                                <Badge className="bg-green-50 text-green-700 border-green-300">
+                                  ✓ {item.status}
+                                </Badge>
+                              )}
+                              {item.status === "Já enviado" && (
+                                <Badge className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                  ⚠ {item.status}
+                                </Badge>
+                              )}
+                              {item.status === "Na blacklist" && (
+                                <Badge className="bg-red-50 text-red-700 border-red-300">
+                                  ✕ {item.status}
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
           <CardHeader>

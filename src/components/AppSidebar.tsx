@@ -14,6 +14,7 @@ import {
   Database,
   Menu,
   ChevronLeft,
+  Eye,
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,6 +46,7 @@ const menuItems = [
       { title: "Envio de Relatórios", url: "/envio-relatorios", icon: FileText },
       { title: "Envio de Montadores", url: "/envio-montadores", icon: Wrench },
       { title: "Histórico de Envios", url: "/historico-envios", icon: Clock },
+      { title: "Preview de Relatórios", url: "/relatorios-preview", icon: Eye },
     ],
   },
   {

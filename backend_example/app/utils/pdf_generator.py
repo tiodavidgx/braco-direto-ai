@@ -1,6 +1,6 @@
 """
-Gerador de PDFs usando ReportLab
-Modelos bonitos e profissionais para relatórios
+Gerador de PDFs usando Templates HTML + ReportLab (fallback)
+Usa os templates originais do sistema (Jinja2)
 """
 
 from reportlab.lib import colors
@@ -12,6 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.pdfgen import canvas
 from datetime import datetime
 from pathlib import Path
+from jinja2 import Template
 
 # Cores do tema
 COR_PRIMARIA = colors.HexColor('#2563eb')  # Azul
@@ -518,3 +519,126 @@ def gerar_pdf_montador(envio_data: dict, output_path: str):
     )
     
     return output_path
+
+
+# ========== NOVA IMPLEMENTAÇÃO COM TEMPLATES HTML ORIGINAIS ==========
+
+def gerar_pdf_prestador_html(lote_data: dict, output_path: str):
+    """
+    Gera PDF usando template HTML original (invoice_template.html)
+    Retorna HTML renderizado que pode ser convertido para PDF
+    """
+    template_path = Path(__file__).parent.parent / "templates" / "invoice_template.html"
+    
+    if not template_path.exists():
+        print(f"⚠️ Template não encontrado: {template_path}")
+        # Fallback para método ReportLab
+        return gerar_pdf_prestador(lote_data, output_path)
+    
+    # Carregar template
+    template_content = template_path.read_text(encoding='utf-8')
+    template = Template(template_content)
+    
+    # Preparar dados para o template
+    items_fmt = []
+    for os_item in lote_data.get('os_list', []):
+        data_exec = os_item.get('data_execucao', '')
+        if isinstance(data_exec, datetime):
+            data_exec = data_exec.strftime('%d/%m/%Y')
+        
+        items_fmt.append({
+            "OS": os_item.get('o_s', ''),
+            "Cliente": os_item.get('cliente', '-'),
+            "Localidade": os_item.get('localidade', '-'),
+            "Modalidade": os_item.get('modalidade', ''),
+            "Data_execucao": data_exec,
+            "Valor": f"{os_item.get('valor_custo_prestador', 0):.2f}",
+            "Valor_extra": f"{os_item.get('valor_extra', 0):.2f}",
+            "Motivo_valor_extra": os_item.get('motivo_extra', '-'),
+            "Valor_total": f"{os_item.get('valor_total', 0):.2f}"
+        })
+    
+    context = {
+        "nome_prestador": lote_data.get('prestador_nome', ''),
+        "periodo": lote_data.get('periodo', ''),
+        "lote_id": lote_data.get('id', ''),
+        "items": items_fmt,
+        "total_geral": f"{lote_data.get('total_lote', 0):.2f}"
+    }
+    
+    # Renderizar HTML
+    html_content = template.render(**context)
+    
+    # Salvar HTML temporariamente para debug (opcional)
+    # html_path = str(output_path).replace('.pdf', '.html')
+    # Path(html_path).write_text(html_content, encoding='utf-8')
+    
+    return html_content
+
+
+def gerar_pdf_montador_html(envio_data: dict, output_path: str):
+    """
+    Gera PDF usando template HTML original (montador_template.html)
+    Retorna HTML renderizado que pode ser convertido para PDF
+    """
+    template_path = Path(__file__).parent.parent / "templates" / "montador_template.html"
+    
+    if not template_path.exists():
+        print(f"⚠️ Template não encontrado: {template_path}")
+        # Fallback para método ReportLab
+        return gerar_pdf_montador(envio_data, output_path)
+    
+    # Carregar template
+    template_content = template_path.read_text(encoding='utf-8')
+    template = Template(template_content)
+    
+    # Preparar dados para o template
+    items_fmt = []
+    total_comissao = 0
+    total_adicionais = 0
+    
+    for montagem in envio_data.get('montagens', []):
+        data_montagem = montagem.get('data_montagem', '')
+        if isinstance(data_montagem, datetime):
+            data_montagem = data_montagem.strftime('%d/%m/%Y')
+        
+        valor_venda = float(montagem.get('valor_venda', 0))
+        percentual_comissao = float(envio_data.get('percentual_comissao', 0))
+        comissao_calculada = valor_venda * (percentual_comissao / 100)
+        comissao_editada = montagem.get('comissao_editada')
+        adicional = float(montagem.get('valor_adicional', 0))
+        
+        items_fmt.append({
+            "boletim": montagem.get('boletim_montagem', ''),
+            "data_montagem": data_montagem,
+            "cliente": montagem.get('cliente', ''),
+            "nome_produto": montagem.get('produto', ''),
+            "valor_venda": valor_venda,
+            "comissao_calculada": comissao_calculada,
+            "comissao_editada": comissao_editada,
+            "adicional": adicional
+        })
+        
+        # Usar comissão editada se existir, senão a calculada
+        comissao_final = comissao_editada if comissao_editada is not None else comissao_calculada
+        total_comissao += comissao_final
+        total_adicionais += adicional
+    
+    total_auxilio = float(envio_data.get('auxilio_semanal', 0))
+    total_geral = total_comissao + total_adicionais + total_auxilio
+    
+    context = {
+        "nome_montador": envio_data.get('montador_nome', ''),
+        "periodo_relatorio": envio_data.get('periodo', ''),
+        "items": items_fmt,
+        "percentual_comissao": envio_data.get('percentual_comissao', 0),
+        "total_comissao": total_comissao,
+        "total_adicionais": total_adicionais,
+        "total_auxilio": total_auxilio,
+        "total_geral": total_geral
+    }
+    
+    # Renderizar HTML
+    html_content = template.render(**context)
+    
+    return html_content

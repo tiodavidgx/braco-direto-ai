@@ -36,7 +36,17 @@ class JobUpdate(BaseModel):
 @router.get("/status")
 async def get_jobs_status():
     """Retorna status de todos os jobs em execução"""
-    return job_status
+    # Status do scheduler integrado
+    try:
+        from app.scheduler import obter_status_scheduler
+        scheduler_status = obter_status_scheduler()
+    except:
+        scheduler_status = {'running': False, 'jobs': []}
+    
+    return {
+        'manual_execution': job_status,
+        'scheduler': scheduler_status
+    }
 
 
 @router.post("/consulta-notas/executar")
@@ -234,6 +244,33 @@ def get_jobs_config():
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
+        # Criar tabela se não existir
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS jobs_config (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) UNIQUE NOT NULL,
+                descricao TEXT,
+                ativo BOOLEAN DEFAULT TRUE,
+                intervalo_minutos INTEGER DEFAULT 60,
+                ultima_execucao TIMESTAMP,
+                proxima_execucao TIMESTAMP,
+                total_execucoes INTEGER DEFAULT 0,
+                total_erros INTEGER DEFAULT 0,
+                ultima_mensagem TEXT,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Inserir job padrão se não existir
+        cursor.execute("""
+            INSERT INTO jobs_config (nome, descricao, ativo, intervalo_minutos)
+            VALUES ('consulta_notas', 'Consulta notas fiscais na API e cria cards no Trello', TRUE, 60)
+            ON CONFLICT (nome) DO NOTHING
+        """)
+        
+        conn.commit()
+        
         cursor.execute("""
             SELECT 
                 id,
@@ -283,7 +320,16 @@ def update_job_config(job_name: str, update: JobUpdate):
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Job não encontrado")
         
-        return {"message": "Configuração atualizada"}
+        conn.commit()
+    
+    # Recarregar scheduler para aplicar mudanças
+    try:
+        from app.scheduler import recarregar_scheduler
+        recarregar_scheduler()
+    except Exception as e:
+        print(f"Erro ao recarregar scheduler: {e}")
+    
+    return {"message": "Configuração atualizada"}
 
 
 @router.get("/logs")

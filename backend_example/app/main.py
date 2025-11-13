@@ -39,6 +39,24 @@ async def startup_event():
     print("🚀 Iniciando Braço Direito API...")
     init_db()
     print("✅ Banco de dados inicializado")
+    
+    # Iniciar scheduler de jobs
+    try:
+        from app.scheduler import iniciar_scheduler
+        iniciar_scheduler()
+        print("✅ Scheduler de jobs iniciado")
+    except Exception as e:
+        print(f"⚠️  Erro ao iniciar scheduler: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Executado quando a aplicação encerra"""
+    try:
+        from app.scheduler import parar_scheduler
+        parar_scheduler()
+        print("🛑 Scheduler de jobs parado")
+    except Exception as e:
+        print(f"⚠️  Erro ao parar scheduler: {e}")
 
 # Rota raiz
 @app.get("/")

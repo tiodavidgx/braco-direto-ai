@@ -47,31 +47,31 @@ export interface SchedulerStatus {
 export const jobsService = {
   // Status dos jobs em execução
   async getStatus(): Promise<JobStatus> {
-    const response = await apiClient.get('/jobs/status') as { data: JobStatus };
-    return response.data;
+    const response = await apiClient.get<JobStatus>('/jobs/status');
+    return response;
   },
 
   // Executar job de consulta de notas manualmente
   async executarConsultaNotas() {
-    const response = await apiClient.post('/jobs/consulta-notas/executar') as { data: any };
-    return response.data;
+    const response = await apiClient.post<any>('/jobs/consulta-notas/executar');
+    return response;
   },
 
   // Obter resultado do último job
   async getResultadoConsultaNotas(): Promise<JobResult> {
-    const response = await apiClient.get('/jobs/consulta-notas/resultado') as { data: JobResult };
-    return response.data;
+    const response = await apiClient.get<JobResult>('/jobs/consulta-notas/resultado');
+    return response;
   },
 
   // Configurações de jobs
-  async getJobs(): Promise<JobConfig[]> {
-    const response = await apiClient.get('/jobs/config') as { data: JobConfig[] };
-    return response.data;
+  async getJobsConfig(): Promise<JobConfig[]> {
+    const response = await apiClient.get<JobConfig[]>('/jobs/config');
+    return response;
   },
 
-  async updateJob(jobName: string, data: { ativo: boolean; intervalo_minutos: number }) {
-    const response = await apiClient.put(`/jobs/config/${jobName}`, data) as { data: any };
-    return response.data;
+  async updateJobConfig(jobName: string, data: { ativo: boolean; intervalo_minutos: number }) {
+    const response = await apiClient.put<any>(`/jobs/config/${jobName}`, data);
+    return response;
   },
 
   // Scheduler (processo externo)

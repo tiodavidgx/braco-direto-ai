@@ -17,6 +17,7 @@ import Automacao from "./pages/Automacao";
 import Integracoes from "./pages/Integracoes";
 import Jobs from "./pages/Jobs";
 import EmailConfig from "./pages/EmailConfig";
+import RelatoriosPreview from "./pages/RelatoriosPreview";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
                   <Route path="/jobs" element={<Jobs />} />
                   <Route path="/email-config" element={<EmailConfig />} />
                   <Route path="/auth/callback" element={<EmailConfig />} />
+                  <Route path="/relatorios-preview" element={<RelatoriosPreview />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

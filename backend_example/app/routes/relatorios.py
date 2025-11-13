@@ -47,13 +47,16 @@ def check_os_sent(os_numbers):
     if not os_numbers:
         return []
     
+    # Converter todos os números para string
+    os_numbers_str = [str(os) for os in os_numbers]
+    
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT DISTINCT os_numero 
                 FROM os_enviadas 
                 WHERE os_numero = ANY(%s)
-            """, (os_numbers,))
+            """, (os_numbers_str,))
             
             sent_os = [row['os_numero'] for row in cur.fetchall()]
     
@@ -75,13 +78,16 @@ def check_os_blacklist(os_numbers):
     if not os_numbers:
         return []
     
+    # Converter todos os números para string
+    os_numbers_str = [str(os) for os in os_numbers]
+    
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT DISTINCT os_numero 
                 FROM os_blacklist 
                 WHERE os_numero = ANY(%s)
-            """, (os_numbers,))
+            """, (os_numbers_str,))
             
             blacklisted_os = [row['os_numero'] for row in cur.fetchall()]
     
@@ -103,12 +109,15 @@ def check_boletins_sent(boletins):
     if not boletins:
         return []
     
+    # Converter todos os boletins para string
+    boletins_str = [str(b) for b in boletins]
+    
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # No sistema original, boletins são armazenados no campo JSONB detalhes
             # Procurar nos detalhes de envios_montagem
             sent_boletins = []
-            for boletim in boletins:
+            for boletim in boletins_str:
                 cur.execute("""
                     SELECT COUNT(*) as count
                     FROM envios_montagem
@@ -137,13 +146,16 @@ def check_boletins_blacklist(boletins):
     if not boletins:
         return []
     
+    # Converter todos os boletins para string
+    boletins_str = [str(b) for b in boletins]
+    
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT DISTINCT boletim 
                 FROM boletins_blacklist 
                 WHERE boletim = ANY(%s)
-            """, (boletins,))
+            """, (boletins_str,))
             
             blacklisted_boletins = [row['boletim'] for row in cur.fetchall()]
     
@@ -370,6 +382,36 @@ def gerar_pdf_prestador(lote_data):
     
     return pdf_path
 
+def gerar_pdf_montador_html_template(envio_data):
+    """
+    Gera PDF do montador usando template HTML original com WeasyPrint
+    """
+    from jinja2 import Template
+    from pathlib import Path
+    from weasyprint import HTML
+    import tempfile
+    import base64
+    
+    template_path = Path(__file__).parent.parent / "templates" / "montador_template.html"
+    template_content = template_path.read_text(encoding='utf-8')
+    template = Template(template_content)
+    
+    # Carregar logo e converter para base64
+    logo_path = Path(__file__).parent.parent / "templates" / "LOGO-NOVO-MUNDO-PEQUENA.png"
+    if logo_path.exists():
+        with open(logo_path, 'rb') as f:
+            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+            envio_data['logo_url'] = f"data:image/png;base64,{logo_base64}"
+    else:
+        envio_data['logo_url'] = ""
+    
+    # Renderizar HTML e converter para PDF
+    html_content = template.render(**envio_data)
+    pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
+    pdf_file.close()
+    HTML(string=html_content).write_pdf(pdf_file.name)
+    return pdf_file.name
+
 def gerar_pdf_montador(envio_data):
     """
     Gera PDF do relatório de montador EXATAMENTE como no sistema original
@@ -549,8 +591,67 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 
                 lote['os_list'] = os_list
                 
-                # Gerar PDF
-                pdf_path = gerar_pdf_prestador(lote)
+                # Gerar PDF usando template HTML original
+                from jinja2 import Template
+                from pathlib import Path
+                import base64
+                
+                template_path = Path(__file__).parent.parent / "templates" / "invoice_template.html"
+                template_content = template_path.read_text(encoding='utf-8')
+                template = Template(template_content)
+                
+                # Carregar logo e converter para base64
+                logo_path = Path(__file__).parent.parent / "templates" / "LOGO-NOVO-MUNDO-PEQUENA.png"
+                if logo_path.exists():
+                    with open(logo_path, 'rb') as f:
+                        logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+                        logo_data_uri = f"data:image/png;base64,{logo_base64}"
+                else:
+                    logo_data_uri = ""
+                
+                # Preparar dados para o template
+                items_fmt = []
+                for os_item in os_list:
+                    data_exec = os_item.get('data_execucao', '')
+                    if hasattr(data_exec, 'strftime'):
+                        data_exec = data_exec.strftime('%d/%m/%Y')
+                    
+                    items_fmt.append({
+                        "OS": os_item.get('o_s', ''),
+                        "Cliente": os_item.get('cliente', '-'),
+                        "Localidade": os_item.get('localidade', '-'),
+                        "Modalidade": os_item.get('modalidade', ''),
+                        "Data_execucao": str(data_exec),
+                        "Valor": f"{float(os_item.get('valor_custo_prestador', 0)):.2f}",
+                        "Valor_extra": f"{float(os_item.get('valor_extra', 0)):.2f}",
+                        "Motivo_valor_extra": os_item.get('motivo_extra', '-'),
+                        "Valor_total": f"{float(os_item.get('valor_total', 0)):.2f}"
+                    })
+                
+                context = {
+                    "nome_prestador": lote['prestador_nome'],
+                    "periodo": lote['periodo'],
+                    "lote_id": lote['id'],
+                    "items": items_fmt,
+                    "total_geral": f"{float(lote['valor_total']):.2f}",
+                    "logo_url": logo_data_uri
+                }
+                
+                # Renderizar HTML
+                html_content = template.render(**context)
+                
+                # Converter HTML para PDF usando WeasyPrint
+                from weasyprint import HTML
+                import tempfile
+                import os
+                
+                # Criar arquivo PDF temporário
+                pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
+                pdf_file.close()
+                
+                # Gerar PDF a partir do HTML
+                HTML(string=html_content).write_pdf(pdf_file.name)
+                pdf_path = pdf_file.name
                 
                 # Montar corpo do email
                 corpo_email = f"""
@@ -601,11 +702,81 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 if not envio:
                     raise HTTPException(status_code=404, detail="Envio não encontrado")
                 
-                # Processar detalhes das montagens
-                detalhes = envio.get('detalhes', {})
+                # Buscar montagens do envio
+                cur.execute("""
+                    SELECT * FROM montagens_enviadas 
+                    WHERE envio_id = %s
+                """, (request.id,))
+                montagens = cur.fetchall()
                 
-                # Gerar PDF
-                pdf_path = gerar_pdf_montador(envio)
+                # Gerar PDF usando template HTML original
+                from jinja2 import Template
+                from pathlib import Path
+                
+                template_path = Path(__file__).parent.parent / "templates" / "montador_template.html"
+                template_content = template_path.read_text(encoding='utf-8')
+                template = Template(template_content)
+                
+                # Preparar dados para o template
+                items_fmt = []
+                total_comissao = 0
+                total_adicionais = 0
+                
+                for montagem in montagens:
+                    data_montagem = montagem.get('data_montagem', '')
+                    if hasattr(data_montagem, 'strftime'):
+                        data_montagem = data_montagem.strftime('%d/%m/%Y')
+                    
+                    valor_venda = float(montagem.get('valor_venda', 0))
+                    percentual_comissao = float(envio.get('percentual_comissao', 0))
+                    comissao_calculada = valor_venda * (percentual_comissao / 100)
+                    comissao_editada = montagem.get('comissao_editada')
+                    adicional = float(montagem.get('valor_adicional', 0))
+                    
+                    items_fmt.append({
+                        "boletim": montagem.get('boletim_montagem', ''),
+                        "data_montagem": str(data_montagem),
+                        "cliente": montagem.get('cliente', ''),
+                        "nome_produto": montagem.get('produto', ''),
+                        "valor_venda": valor_venda,
+                        "comissao_calculada": comissao_calculada,
+                        "comissao_editada": comissao_editada,
+                        "adicional": adicional
+                    })
+                    
+                    comissao_final = comissao_editada if comissao_editada is not None else comissao_calculada
+                    total_comissao += comissao_final
+                    total_adicionais += adicional
+                
+                total_auxilio = float(envio.get('auxilio_semanal', 0))
+                total_geral = total_comissao + total_adicionais + total_auxilio
+                
+                context = {
+                    "nome_montador": envio['montador_nome'],
+                    "periodo_relatorio": envio['periodo'],
+                    "items": items_fmt,
+                    "percentual_comissao": envio.get('percentual_comissao', 0),
+                    "total_comissao": total_comissao,
+                    "total_adicionais": total_adicionais,
+                    "total_auxilio": total_auxilio,
+                    "total_geral": total_geral
+                }
+                
+                # Renderizar HTML
+                html_content = template.render(**context)
+                
+                # Converter HTML para PDF usando WeasyPrint
+                from weasyprint import HTML
+                import tempfile
+                import os
+                
+                # Criar arquivo PDF temporário
+                pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
+                pdf_file.close()
+                
+                # Gerar PDF a partir do HTML
+                HTML(string=html_content).write_pdf(pdf_file.name)
+                pdf_path = pdf_file.name
                 
                 # Enviar email
                 corpo_email = f"""
@@ -919,7 +1090,7 @@ def enviar_lote_relatorios(request: dict):
                     
                 else:  # montador
                     # Calcular período a partir das datas (como no sistema original)
-                    from datetime import datetime, timedelta
+                    from datetime import timedelta
                     datas = []
                     print(f"   🔍 DEBUG - Total de itens para montador: {len(itens)}")
                     for i, item in enumerate(itens):
@@ -983,7 +1154,7 @@ def enviar_lote_relatorios(request: dict):
                         try:
                             if isinstance(data_raw, (int, float)):
                                 # Número serial do Excel
-                                from datetime import datetime, timedelta
+                                from datetime import timedelta
                                 excel_epoch = datetime(1899, 12, 30)
                                 data_obj = excel_epoch + timedelta(days=float(data_raw))
                                 return data_obj.strftime('%d/%m/%Y')
@@ -1103,18 +1274,20 @@ def enviar_lote_relatorios(request: dict):
                             if resposta_api.get('success'):
                                 id_controle_api = resposta_api.get('id_controle') or resposta_api.get('id')
                                 link_upload = resposta_api.get('link')
+                                upload_hash = resposta_api.get('hash')  # ✅ CRÍTICO: Pegar o hash da resposta
                                 
                                 print(f"   ✅ Enviado para API - ID Controle: {id_controle_api}")
                                 print(f"   ✅ Link gerado: {link_upload}")
+                                print(f"   ✅ Hash: {upload_hash}")
                                 
-                                # Salvar id_controle e link no banco
+                                # Salvar id_controle, link e hash no banco
                                 with get_db_connection() as conn_update:
                                     cur_update = conn_update.cursor()
                                     cur_update.execute("""
                                         UPDATE envios_montagem 
-                                        SET id_controle = %s, link_upload = %s, data_envio_api = NOW()
+                                        SET id_controle = %s, link_upload = %s, upload_hash = %s, data_envio_api = NOW()
                                         WHERE id = %s
-                                    """, (id_controle_api, link_upload, lote_id))
+                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
                                     conn_update.commit()
                             else:
                                 print(f"   ⚠️ API retornou erro: {resposta_api.get('message')}")
@@ -1163,14 +1336,38 @@ def enviar_lote_relatorios(request: dict):
                     id_controle_api = None
                     try:
                         import requests
+                        import re
                         API_UPLOAD_URL = "http://api.link.dev.br/dvprocessamento/"
                         API_UPLOAD_KEY = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
+                        
+                        # Extrair mês/ano do período (API exige formato MM/AAAA)
+                        periodo_api = periodo
+                        if "/" in periodo and len(periodo) > 7:
+                            # Se for range de datas (ex: "05/10/2025 – 22/10/2025"), extrair a primeira data
+                            match = re.search(r'(\d{2})/(\d{2})/(\d{4})', periodo)
+                            if match:
+                                dia, mes, ano = match.groups()
+                                periodo_api = f"{mes}/{ano}"  # Formato MM/AAAA
+                            else:
+                                # Fallback: pegar só MM/AAAA se já estiver nesse formato
+                                match = re.search(r'(\d{2})/(\d{4})', periodo)
+                                if match:
+                                    periodo_api = periodo
+                                else:
+                                    # Último fallback: usar mês/ano atual
+                                    periodo_api = datetime.now().strftime("%m/%Y")
+                        elif "/" not in periodo:
+                            # Se não tem barra, assumir que é só o ano
+                            periodo_api = f"{periodo}/2025"
+                        
+                        print(f"   📅 Período original: {periodo}")
+                        print(f"   📅 Período para API: {periodo_api}")
                         
                         # Preparar payload para API (usar lote_id real do banco)
                         payload_api = {
                             "nome": nome_destinatario,
                             "email": email_destino,
-                            "periodo": periodo if "/" in periodo else f"{periodo}/2025",
+                            "periodo": periodo_api,
                             "valor_total": detalhes_json['total_geral'] if tipo == "montador" else sum(float(item.get("valor_total", 0)) for item in itens),
                             "quantidade_os": len(itens),
                             "data_envio": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1186,6 +1383,8 @@ def enviar_lote_relatorios(request: dict):
                         }
                         
                         print(f"   📤 Gerando link de upload via API (Lote #{lote_id})...")
+                        print(f"   📦 Payload enviado: {payload_api}")
+                        
                         response_api = requests.post(
                             API_UPLOAD_URL,
                             json=payload_api,
@@ -1198,41 +1397,46 @@ def enviar_lote_relatorios(request: dict):
                             resposta_api = response_api.json()
                             if resposta_api.get('success'):
                                 link_upload = resposta_api.get('link')
-                                id_controle_api = resposta_api.get('id')
+                                id_controle_api = resposta_api.get('id_controle') or resposta_api.get('id')
+                                upload_hash = resposta_api.get('hash')  # ✅ CRÍTICO: Pegar o hash da resposta
                                 print(f"   ✅ Link gerado: {link_upload}")
+                                print(f"   ✅ ID Controle: {id_controle_api}")
+                                print(f"   ✅ Hash: {upload_hash}")
                                 
-                                # Salvar link no lote
+                                # Salvar link, id_controle e hash no lote
                                 with get_db_connection() as conn_link:
                                     cur_link = conn_link.cursor()
                                     if tipo == "prestador":
                                         cur_link.execute("""
                                             UPDATE lotes_servico 
-                                            SET link_upload = %s, id_controle = %s, data_envio_api = NOW()
+                                            SET link_upload = %s, id_controle = %s, upload_hash = %s, data_envio_api = NOW()
                                             WHERE id = %s
-                                        """, (link_upload, id_controle_api, lote_id))
+                                        """, (link_upload, id_controle_api, upload_hash, lote_id))
                                     else:
                                         cur_link.execute("""
                                             UPDATE envios_montagem 
-                                            SET link_upload = %s, id_controle = %s, data_envio_api = NOW()
+                                            SET link_upload = %s, id_controle = %s, upload_hash = %s, data_envio_api = NOW()
                                             WHERE id = %s
-                                        """, (link_upload, id_controle_api, lote_id))
+                                        """, (link_upload, id_controle_api, upload_hash, lote_id))
                                     conn_link.commit()
                             else:
                                 print(f"   ⚠️ API retornou erro: {resposta_api.get('message')}")
+                                print(f"   📋 Resposta completa da API: {resposta_api}")
+                                link_upload = None
                         else:
                             print(f"   ⚠️ API respondeu com status {response_api.status_code}")
+                            print(f"   📋 Resposta completa da API: {response_api.text}")
+                            link_upload = None
                     
                     except Exception as e:
                         print(f"   ⚠️ Erro ao gerar link (prestador): {e}")
-                    
-                    # Fallback se API falhar (SOMENTE para prestador)
-                    if not link_upload:
-                        link_upload = f"https://upload.novomundo.com.br/{uuid.uuid4().hex[:12]}"
+                        import traceback
+                        traceback.print_exc()
+                        link_upload = None
                 
-                # Garantir que link_upload existe (fallback final SOMENTE se ainda não foi definido)
-                # Para montador, o link já foi gerado no bloco acima (linhas 1018-1095)
-                if not link_upload and tipo == "prestador":
-                    link_upload = f"https://upload.novomundo.com.br/{uuid.uuid4().hex[:12]}"
+                # Verificar se conseguiu gerar o link
+                if not link_upload:
+                    raise Exception("Falha ao gerar link de upload via API externa")
                 
                 # Substituir variáveis no template
                 if tipo == "prestador":
@@ -1270,10 +1474,62 @@ def enviar_lote_relatorios(request: dict):
                         "total_geral": total_geral
                     }
                     
-                    # Gerar PDF
+                    # Gerar PDF usando template HTML original
                     print(f"   📄 Gerando PDF do prestador...")
-                    pdf_path = gerar_pdf_prestador(lote_data)
+                    from jinja2 import Template
+                    from pathlib import Path
+                    from weasyprint import HTML
+                    import tempfile
+                    import base64
                     
+                    template_path = Path(__file__).parent.parent / "templates" / "invoice_template.html"
+                    template_content = template_path.read_text(encoding='utf-8')
+                    template = Template(template_content)
+                    
+                    # Carregar logo e converter para base64
+                    logo_path = Path(__file__).parent.parent / "templates" / "LOGO-NOVO-MUNDO-PEQUENA.png"
+                    if logo_path.exists():
+                        with open(logo_path, 'rb') as f:
+                            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+                            logo_data_uri = f"data:image/png;base64,{logo_base64}"
+                    else:
+                        logo_data_uri = ""
+                    
+                    # Preparar dados para o template
+                    items_fmt = []
+                    for item in itens:
+                        data_exec = item.get('data_execucao', '')
+                        if hasattr(data_exec, 'strftime'):
+                            data_exec = data_exec.strftime('%d/%m/%Y')
+                        
+                        items_fmt.append({
+                            "OS": item.get('o_s', ''),
+                            "Cliente": item.get('cliente', '-'),
+                            "Localidade": item.get('localidade', '-'),
+                            "Modalidade": item.get('modalidade', ''),
+                            "Data_execucao": str(data_exec),
+                            "Valor": f"{float(item.get('valor_custo_prestador', item.get('valor', 0))):.2f}",
+                            "Valor_extra": f"{float(item.get('valor_extra', 0)):.2f}",
+                            "Motivo_valor_extra": item.get('motivo_extra', '-'),
+                            "Valor_total": f"{float(item.get('valor_total', 0)):.2f}"
+                        })
+                    
+                    context = {
+                        "nome_prestador": nome_destinatario,
+                        "periodo": periodo,
+                        "lote_id": lote_id,
+                        "items": items_fmt,
+                        "total_geral": f"{total_geral:.2f}",
+                        "logo_url": logo_data_uri
+                    }
+                    
+                    # Renderizar HTML e converter para PDF
+                    html_content = template.render(**context)
+                    pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
+                    pdf_file.close()
+                    HTML(string=html_content).write_pdf(pdf_file.name)
+                    pdf_path = pdf_file.name
+                
                 else:  # montador
                     # DEBUG: Verificar valor do link_upload antes de usar no template
                     print(f"   🔍 DEBUG - link_upload antes do template: {link_upload}")
@@ -1299,27 +1555,27 @@ def enviar_lote_relatorios(request: dict):
                     if envio_data.get('items'):
                         print(f"   🔍 DEBUG - primeiro item: {envio_data['items'][0]}")
                     print(f"   �🔗 Link que será usado no email: {link_upload}")
-                    pdf_path = gerar_pdf_montador(envio_data)
-                
-                # Converter corpo para HTML
-                corpo_html = corpo.replace("\n", "<br>").replace("**", "<strong>").replace("**", "</strong>")
-                
-                print(f"\n📧 Enviando para: {nome_destinatario} ({email_destino})")
-                print(f"   Assunto: {assunto}")
-                print(f"   Itens: {len(itens)}")
-                print(f"   PDF: {pdf_path}")
-                
-                # Enviar email com PDF anexado
-                enviar_email_graph(
-                    destinatario=email_destino,
-                    assunto=assunto,
-                    corpo_html=f"<html><body>{corpo_html}</body></html>",
-                    anexo_path=pdf_path
-                )
-                
-                sucesso += len(itens)
-                print(f"   ✅ Email enviado com sucesso com PDF anexado!")
-                print(f"   ✅ Lote #{lote_id} registrado com {len(itens)} itens")
+                    pdf_path = gerar_pdf_montador_html_template(envio_data)
+            
+            # Converter corpo para HTML
+            corpo_html = corpo.replace("\n", "<br>").replace("**", "<strong>").replace("**", "</strong>")
+            
+            print(f"\n📧 Enviando para: {nome_destinatario} ({email_destino})")
+            print(f"   Assunto: {assunto}")
+            print(f"   Itens: {len(itens)}")
+            print(f"   PDF: {pdf_path}")
+            
+            # Enviar email com PDF anexado
+            enviar_email_graph(
+                destinatario=email_destino,
+                assunto=assunto,
+                corpo_html=f"<html><body>{corpo_html}</body></html>",
+                anexo_path=pdf_path
+            )
+            
+            sucesso += len(itens)
+            print(f"   ✅ Email enviado com sucesso com PDF anexado!")
+            print(f"   ✅ Lote #{lote_id} registrado com {len(itens)} itens")
                 
         except Exception as e:
             import traceback

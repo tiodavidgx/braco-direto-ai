@@ -14,7 +14,7 @@ class ConsultaNFClient:
     """
     
     def __init__(self):
-        self.base_url = "http://api.link.dev.br/dvprocessamento"
+        self.base_url = "https://api.link.dev.br/dvprocessamento"
         self.api_key = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
     
     def consultar_e_processar(self, upload_hash: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
@@ -31,50 +31,72 @@ class ConsultaNFClient:
             - erro: Mensagem de erro caso sucesso seja False
         """
         try:
-            # Endpoint de consulta
-            url = f"{self.base_url}/consulta/{upload_hash}"
+            # Endpoint de consulta (POST, não GET!)
+            url = f"{self.base_url}/consulta-nf/"
             
             headers = {
-                "X-API-Key": self.api_key,
-                "Accept": "application/json"
+                "Content-Type": "application/json; charset=utf-8",
+                "Accept": "application/json",
+                "User-Agent": "NovoMundo-DisparadorEmail/1.0",
+                "X-API-Key": self.api_key
             }
             
-            response = requests.get(url, headers=headers, timeout=30, verify=False)
+            # Payload com o hash
+            payload = {
+                "hash": upload_hash
+            }
+            
+            # Log da requisição para debug
+            print(f"[DEBUG ConsultaNFClient] URL: {url}")
+            print(f"[DEBUG ConsultaNFClient] Headers: {headers}")
+            print(f"[DEBUG ConsultaNFClient] Payload: {payload}")
+            
+            # POST request (não GET!)
+            response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+            
+            # Log da resposta para debug
+            print(f"[DEBUG ConsultaNFClient] Status Code: {response.status_code}")
+            print(f"[DEBUG ConsultaNFClient] Response Text: {response.text[:500]}")
             
             if response.status_code == 200:
                 data = response.json()
                 
+                # A API retorna estrutura diferente
+                if not data.get('success'):
+                    return False, None, data.get('message', 'API retornou success=false')
+                
+                nota_fiscal = data.get('nota_fiscal', {})
+                arquivos_raw = data.get('arquivos', [])
+                stats = data.get('estatisticas', {})
+                status_info = data.get('status_info', {})
+                
                 # Processar resposta
                 nota_info = {
                     'hash': upload_hash,
-                    'status': data.get('status', 0),
-                    'status_descricao': self._get_status_descricao(data.get('status', 0)),
-                    'link_valido': data.get('link_valido', False),
-                    'dias_restantes': data.get('dias_validos_restantes', 0),
-                    'numero_nota': data.get('numero_nota'),
-                    'data_upload': data.get('data_upload')
+                    'status': 1 if arquivos_raw else 0,  # 1=recebido, 0=aguardando
+                    'status_descricao': status_info.get('descricao', 'Aguardando upload'),
+                    'link_valido': status_info.get('link_valido', False),
+                    'dias_restantes': status_info.get('dias_restantes', 0),
+                    'numero_nota': None,  # Não vem na resposta
+                    'data_upload': arquivos_raw[0].get('data_upload') if arquivos_raw else None
                 }
                 
                 # Processar arquivos
                 arquivos = []
-                arquivos_raw = data.get('arquivos', [])
-                
                 for arq in arquivos_raw:
                     arquivos.append({
-                        'nome_original': arq.get('nome_arquivo'),
-                        'tamanho': arq.get('tamanho_bytes', 0),
-                        'tamanho_formatado': self._formatar_tamanho(arq.get('tamanho_bytes', 0)),
-                        'link_download': arq.get('url_download'),
+                        'nome_original': arq.get('nome_original'),
+                        'tamanho': arq.get('tamanho_arquivo', 0),
+                        'tamanho_formatado': arq.get('tamanho_formatado', '0 B'),
+                        'link_download': arq.get('link_download'),
                         'data_upload': arq.get('data_upload')
                     })
                 
                 # Estatísticas
-                total_tamanho = sum(arq['tamanho'] for arq in arquivos)
-                
                 estatisticas = {
-                    'total_arquivos': len(arquivos),
-                    'total_tamanho': total_tamanho,
-                    'total_tamanho_formatado': self._formatar_tamanho(total_tamanho)
+                    'total_arquivos': stats.get('total_arquivos', len(arquivos)),
+                    'total_tamanho': stats.get('total_tamanho', 0),
+                    'total_tamanho_formatado': stats.get('total_tamanho_formatado', '0 B')
                 }
                 
                 resultado = {
@@ -125,6 +147,7 @@ class ConsultaNFClient:
         """
         try:
             headers = {
+                "User-Agent": "NovoMundo-DisparadorEmail/1.0",
                 "X-API-Key": self.api_key
             }
             
