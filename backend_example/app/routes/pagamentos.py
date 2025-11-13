@@ -67,20 +67,20 @@ def get_todos_pagamentos_pendentes():
             # Buscar montagens pendentes
             cur.execute("""
                 SELECT 
-                    os.id,
-                    os.montador_id,
+                    em.id,
+                    em.montador_id,
                     m.nome as montador_nome,
                     m.fornecedor_id as montador_fornecedor_id,
-                    os.periodo,
-                    os.valor_total,
-                    os.data_vencimento_pagamento,
-                    os.data_recebimento_nf,
-                    os.data_pagamento,
-                    os.detalhes
-                FROM os_enviadas os
-                JOIN montadores m ON os.montador_id = m.id
-                WHERE os.data_pagamento IS NULL
-                ORDER BY os.data_vencimento_pagamento ASC NULLS LAST
+                    em.periodo,
+                    em.valor_total,
+                    em.data_vencimento_pagamento,
+                    em.data_recebimento_nf,
+                    em.data_pagamento,
+                    em.detalhes
+                FROM envios_montagem em
+                JOIN montadores m ON em.montador_id = m.id
+                WHERE em.data_pagamento IS NULL
+                ORDER BY em.data_vencimento_pagamento ASC NULLS LAST
             """)
             
             montagens = []
@@ -123,7 +123,7 @@ def marcar_todos_nao_pendentes_como_pagos():
             
             # Marcar montagens com NF como pagos
             cur.execute("""
-                UPDATE os_enviadas 
+                UPDATE envios_montagem 
                 SET data_pagamento = %s
                 WHERE data_recebimento_nf IS NOT NULL 
                 AND data_pagamento IS NULL
@@ -154,7 +154,7 @@ def desmarcar_todos_como_pagos():
             
             # Desmarcar montagens
             cur.execute("""
-                UPDATE os_enviadas 
+                UPDATE envios_montagem 
                 SET data_pagamento = NULL
                 WHERE data_pagamento IS NOT NULL
             """)
@@ -197,7 +197,7 @@ def marcar_montagem_como_paga(id: int):
             data_hoje = datetime.now().date()
             
             cur.execute("""
-                UPDATE os_enviadas 
+                UPDATE envios_montagem 
                 SET data_pagamento = %s
                 WHERE id = %s
             """, (data_hoje, id))

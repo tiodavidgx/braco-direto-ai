@@ -12,4 +12,7 @@ export interface PagamentoPendente {
   _tipo_original: 'servico' | 'montagem';
   _id: number;
   _dias: number;
+  _corFundo?: string;
+  _valorNumerico?: number;
+  _dataVencimento?: string;
 }
