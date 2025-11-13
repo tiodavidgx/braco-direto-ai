@@ -196,24 +196,28 @@ export default function PagamentosVencidos() {
     }
   };
 
-  const totalServicos = pagamentos.servicos.length;
-  const totalMontagens = pagamentos.montagens.length;
-  const totalGeral = totalServicos + totalMontagens;
-  const vencidos = pagamentos.servicos.filter(p => p.dias_para_vencimento < 0).length + 
-                   pagamentos.montagens.filter(p => p.dias_para_vencimento < 0).length;
-  const urgentes = pagamentos.servicos.filter(p => p.dias_para_vencimento <= 1 && p.dias_para_vencimento >= 0).length + 
-                   pagamentos.montagens.filter(p => p.dias_para_vencimento <= 1 && p.dias_para_vencimento >= 0).length;
-  const comNF = pagamentos.servicos.filter(p => p.data_recebimento_nf).length +
-                pagamentos.montagens.filter(p => p.data_recebimento_nf).length;
-  const semNF = totalGeral - comNF;
+  // Filtrar apenas os que têm NF
+  const servicosComNF = pagamentos.servicos.filter(p => p.data_recebimento_nf);
+  const montagensComNF = pagamentos.montagens.filter(p => p.data_recebimento_nf);
 
-  const valorTotal = pagamentos.servicos.reduce((acc, p) => acc + (p.valor_total || 0), 0) +
-                     pagamentos.montagens.reduce((acc, p) => acc + (p.valor_total || 0), 0);
+  const totalServicos = servicosComNF.length;
+  const totalMontagens = montagensComNF.length;
+  const totalGeral = totalServicos + totalMontagens;
+  const vencidos = servicosComNF.filter(p => p.dias_para_vencimento < 0).length + 
+                   montagensComNF.filter(p => p.dias_para_vencimento < 0).length;
+  const urgentes = servicosComNF.filter(p => p.dias_para_vencimento <= 1 && p.dias_para_vencimento >= 0).length + 
+                   montagensComNF.filter(p => p.dias_para_vencimento <= 1 && p.dias_para_vencimento >= 0).length;
+  const comNF = totalGeral; // Todos têm NF agora
+  const semNF = 0; // Nenhum sem NF
+
+  const valorTotal = servicosComNF.reduce((acc, p) => acc + (p.valor_total || 0), 0) +
+                     montagensComNF.reduce((acc, p) => acc + (p.valor_total || 0), 0);
 
   // Preparar dados da tabela
   const dadosTabela: PagamentoPendente[] = [];
 
-  pagamentos.servicos.forEach(lote => {
+  // Usar arrays já filtrados
+  servicosComNF.forEach(lote => {
     const { emoji, texto, prioridade, corFundo } = obterStatusUrgencia(lote.dias_para_vencimento);
     const fornecedorId = lote.prestador_fornecedor_id || '-';
     dadosTabela.push({
@@ -236,7 +240,8 @@ export default function PagamentosVencidos() {
     });
   });
 
-  pagamentos.montagens.forEach(envio => {
+  // Usar arrays já filtrados
+  montagensComNF.forEach(envio => {
     const { emoji, texto, prioridade, corFundo } = obterStatusUrgencia(envio.dias_para_vencimento);
     const detalhes = envio.detalhes || {};
     const periodo = detalhes.periodo_relatorio || envio.periodo || 'N/A';

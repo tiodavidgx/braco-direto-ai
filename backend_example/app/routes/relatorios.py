@@ -1871,6 +1871,27 @@ def get_os_by_lote(lote_id: int, tipo: str = Query(..., description="Tipo: 'pres
                 WHERE os.lote_id = %s
                 ORDER BY os.os_numero
             """, (lote_id,))
+            
+            items = cur.fetchall()
+            
+            # Extrair campos do JSONB detalhes para facilitar acesso no frontend
+            result = []
+            for item in items:
+                detalhes = item.get('detalhes', {}) or {}
+                
+                result.append({
+                    'id': item['id'],
+                    'os_numero': item['os_numero'],
+                    'prestador_nome': item['prestador_nome'],
+                    'cliente': detalhes.get('cliente', detalhes.get('Cliente', '')),
+                    'servico': detalhes.get('servico', detalhes.get('Servico', detalhes.get('tipo_servico', detalhes.get('modalidade', '')))),
+                    'endereco': detalhes.get('endereco', detalhes.get('Endereco', '')),
+                    'valor_total': detalhes.get('valor_total', detalhes.get('valor_custo_prestador', detalhes.get('valor', 0))),
+                    'valor_extra': detalhes.get('valor_extra', 0),
+                    'detalhes': detalhes  # Manter detalhes completo como fallback
+                })
+            
+            return result
         else:
             # Buscar boletins do envio de montagem (estão no JSONB detalhes)
             cur.execute("""
@@ -1889,19 +1910,19 @@ def get_os_by_lote(lote_id: int, tipo: str = Query(..., description="Tipo: 'pres
                 return [
                     {
                         'id': idx,
-                        'boletim': item.get('boletim', ''),
-                        'data_montagem': item.get('data_montagem', ''),
-                        'cliente': item.get('cliente', ''),
+                        'boletim': item.get('boletim', item.get('identificador_boletim_montagem', '')),
+                        'data_montagem': item.get('data_montagem', item.get('data_da_montagem', '')),
+                        'cliente': item.get('cliente', item.get('nome_do_cliente', '')),
                         'nome_produto': item.get('nome_produto', ''),
+                        'valor_venda': item.get('valor_venda', item.get('media_de_valor_venda', 0)),
+                        'comissao_calculada': item.get('comissao_calculada', item.get('comissao', 0)),
+                        'comissao_editada': item.get('comissao_editada'),
+                        'adicional': item.get('adicional', 0),
                         'montador_nome': result['montador_nome']
                     }
                     for idx, item in enumerate(items_list)
                 ]
             return []
-        
-        items = cur.fetchall()
-    
-    return [dict(item) for item in items]
 
 
 @router.delete("/historico-envios/prestador/{lote_id}")
