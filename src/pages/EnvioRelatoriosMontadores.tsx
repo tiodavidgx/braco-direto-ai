@@ -26,6 +26,7 @@ import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import { montadoresService } from "@/services/montadores.service";
+import { emailConfigService } from "@/services/email-config.service";
 import { Montador } from "@/types/montador";
 
 interface MontadorEntry {
@@ -51,6 +52,7 @@ export default function EnvioRelatoriosMontadores() {
   // Status preview
   const [statusPreview, setStatusPreview] = useState<any[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
   
   // Dados do banco
   const [montadores, setMontadores] = useState<Montador[]>([]);
@@ -96,6 +98,25 @@ Qualquer dúvida, estamos à disposição.`,
     };
 
     loadData();
+  }, []);
+
+  // Carregar configuração de email salva
+  useEffect(() => {
+    const loadEmailConfig = async () => {
+      try {
+        const config = await emailConfigService.getConfig("montador");
+        setEmailConfig({
+          cc: config.cc || "projetos.qualidade@novomundo.com.br",
+          assunto: config.assunto,
+          corpo: config.corpo
+        });
+      } catch (error) {
+        console.error("Erro ao carregar configuração de email:", error);
+        // Manter config padrão se der erro
+      }
+    };
+
+    loadEmailConfig();
   }, []);
 
   // Verificar status quando dados mudarem
@@ -294,6 +315,25 @@ Qualquer dúvida, estamos à disposição.`,
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  // Salvar configuração de email
+  const salvarConfiguracao = async () => {
+    if (!emailConfig.assunto || !emailConfig.corpo) {
+      toast.error("Assunto e corpo são obrigatórios");
+      return;
+    }
+
+    setSavingConfig(true);
+    try {
+      await emailConfigService.saveConfig("montador", emailConfig);
+      toast.success("✅ Configuração salva! Será usada no próximo envio.");
+    } catch (error) {
+      console.error("Erro ao salvar configuração:", error);
+      toast.error("Erro ao salvar configuração");
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   // Enviar relatórios
@@ -682,6 +722,18 @@ Qualquer dúvida, estamos à disposição.`,
               rows={6}
             />
           </div>
+
+          <Button 
+            onClick={salvarConfiguracao} 
+            disabled={savingConfig}
+            variant="outline"
+            className="w-full"
+          >
+            💾 Salvar Configuração
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            A configuração salva será carregada automaticamente na próxima vez
+          </p>
 
           <div className="flex items-center space-x-2">
             <Checkbox

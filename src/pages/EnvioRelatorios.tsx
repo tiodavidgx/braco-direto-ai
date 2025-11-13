@@ -26,9 +26,8 @@ import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import { prestadoresService } from "@/services/prestadores.service";
-import { montadoresService } from "@/services/montadores.service";
+import { emailConfigService } from "@/services/email-config.service";
 import { Prestador } from "@/types/prestador";
-import { Montador } from "@/types/montador";
 
 // Interfaces baseadas no streamlit original
 interface PrestadorEntry {
@@ -45,21 +44,9 @@ interface PrestadorEntry {
   valor_total: number;
 }
 
-interface MontadorEntry {
-  identificador_do_montador: string;
-  nome_do_montador: string;
-  identificador_boletim_montagem: string;
-  data_da_montagem: string;
-  media_de_valor_venda: number;
-  nome_do_cliente: string;
-  nome_produto: string;
-}
-
 export default function EnvioRelatorios() {
   // Estado principal
-  const [tipoEnvio, setTipoEnvio] = useState<"prestador" | "montador">("prestador");
   const [manualEntriesPrestador, setManualEntriesPrestador] = useState<PrestadorEntry[]>([]);
-  const [manualEntriesMontador, setManualEntriesMontador] = useState<MontadorEntry[]>([]);
   const [excelData, setExcelData] = useState<any[]>([]);
   const [dataParaEnvio, setDataParaEnvio] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
@@ -68,10 +55,10 @@ export default function EnvioRelatorios() {
   // Status preview
   const [statusPreview, setStatusPreview] = useState<any[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
   
   // Dados do banco
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
-  const [montadores, setMontadores] = useState<Montador[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form Manual - Prestador
@@ -88,62 +75,55 @@ export default function EnvioRelatorios() {
     motivo_extra: "",
   });
 
-  // Form Manual - Montador
-  const [formMontador, setFormMontador] = useState({
-    nome_montador: "",
-    identificador: "",
-    boletim: "",
-    data_montagem: "",
-    valor_venda: "0",
-    cliente: "",
-    produto: "",
-  });
-
   // Configurações de email
   const [emailConfig, setEmailConfig] = useState({
     cc: "projetos.qualidade@novomundo.com.br",
-    assunto: tipoEnvio === "prestador"
-      ? "Novo Mundo Resolve | Nota Fiscal | Período: {{periodo}} | Prestador: {{nome_prestador}}"
-      : "Relatório de Pagamento de Montagem - Período: {{periodo_relatorio}}",
-    corpo: tipoEnvio === "prestador"
-      ? `Segue a relação de boletins para emissão da nota fiscal de serviços entre **{{periodo}}**.
+    assunto: "Novo Mundo Resolve | Nota Fiscal | Período: {{periodo}} | Prestador: {{nome_prestador}}",
+    corpo: `Segue a relação de boletins para emissão da nota fiscal de serviços entre **{{periodo}}**.
 
 📎 Para anexar a Nota Fiscal, acesse o link abaixo:
 {{link_upload}}
 
 ⚠️ Este link é válido por 30 dias.
 
-Obrigado.`
-      : `Olá, {{nome_montador}},
-
-Segue em anexo o seu relatório de pagamento de montagens referente ao período de **{{periodo_relatorio}}**.
-
-📎 **Link para upload de documentos:** {{link_upload}}
-
-Qualquer dúvida, estamos à disposição.`,
+Obrigado.`,
   });
 
-  // Carregar prestadores e montadores do banco
+  // Carregar prestadores do banco
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [prestadoresData, montadoresData] = await Promise.all([
-          prestadoresService.getAll({ limit: 1000 }),
-          montadoresService.getAll({ ativo: true, limit: 1000 })
-        ]);
-        
+        const prestadoresData = await prestadoresService.getAll({ limit: 1000 });
         setPrestadores(prestadoresData.data || []);
-        setMontadores(montadoresData.data || []);
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
-        toast.error("Erro ao carregar prestadores e montadores");
+        toast.error("Erro ao carregar prestadores");
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
+  }, []);
+
+  // Carregar configuração de email salva
+  useEffect(() => {
+    const loadEmailConfig = async () => {
+      try {
+        const config = await emailConfigService.getConfig("prestador");
+        setEmailConfig({
+          cc: config.cc || "projetos.qualidade@novomundo.com.br",
+          assunto: config.assunto,
+          corpo: config.corpo
+        });
+      } catch (error) {
+        console.error("Erro ao carregar configuração de email:", error);
+        // Manter config padrão se der erro
+      }
+    };
+
+    loadEmailConfig();
   }, []);
 
   // Verificar status quando dados mudarem
@@ -158,20 +138,13 @@ Qualquer dúvida, estamos à disposição.`,
       try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
         
-        // Coletar O.S. ou boletins
-        let numbers: string[] = [];
-        let checkEndpoint = "";
-        
-        if (tipoEnvio === "prestador") {
-          numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
-          checkEndpoint = "/blacklist/os/check";
-        } else {
-          numbers = dataParaEnvio.map(item => item.identificador_boletim_montagem).filter(Boolean);
-          checkEndpoint = "/blacklist/boletins/check";
-        }
+        // Coletar O.S.
+        const numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
+        const checkEndpoint = "/blacklist/os/check";
 
         if (numbers.length === 0) {
           setStatusPreview([]);
+          setLoadingPreview(false);
           return;
         }
 
@@ -183,31 +156,18 @@ Qualquer dúvida, estamos à disposição.`,
         });
 
         const blacklisted = blacklistResponse.ok 
-          ? (await blacklistResponse.json()).map(String) // Converter para string
+          ? (await blacklistResponse.json()).map(String)
           : [];
 
-        // Verificar O.S. já enviadas (para prestador)
-        let alreadySent: string[] = [];
-        if (tipoEnvio === "prestador") {
-          const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ os_numbers: numbers }),
-          });
-          alreadySent = sentResponse.ok 
-            ? (await sentResponse.json()).map(String) // Converter para string
-            : [];
-        } else {
-          // Verificar boletins já enviados (para montador)
-          const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ boletins: numbers }),
-          });
-          alreadySent = sentResponse.ok 
-            ? (await sentResponse.json()).map(String) // Converter para string
-            : [];
-        }
+        // Verificar O.S. já enviadas
+        const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ os_numbers: numbers }),
+        });
+        const alreadySent = sentResponse.ok 
+          ? (await sentResponse.json()).map(String)
+          : [];
 
         // Criar preview de status
         const preview = numbers.map(num => {
@@ -230,7 +190,7 @@ Qualquer dúvida, estamos à disposição.`,
     };
 
     verificarStatus();
-  }, [dataParaEnvio, tipoEnvio]);
+  }, [dataParaEnvio]);
 
   // Auto preencher com dados de teste
   const autoPreencherPrestador = () => {
@@ -251,23 +211,6 @@ Qualquer dúvida, estamos à disposição.`,
       valor: "150.00",
       valor_extra: "0",
       motivo_extra: "",
-    });
-    
-    toast.success("Formulário preenchido automaticamente!");
-  };
-
-  const autoPreencherMontador = () => {
-    const hoje = new Date().toISOString().split('T')[0];
-    const osNumber = Math.floor(Math.random() * 9000) + 1000;
-    
-    setFormMontador({
-      nome_montador: montadores.length > 0 ? montadores[0].nome : "",
-      identificador: montadores.length > 0 ? montadores[0].identificador : "",
-      boletim: `H${osNumber}`,
-      data_montagem: hoje,
-      valor_venda: "500.00",
-      cliente: "Nome do cliente",
-      produto: "Produto Teste",
     });
     
     toast.success("Formulário preenchido automaticamente!");
@@ -317,46 +260,6 @@ Qualquer dúvida, estamos à disposição.`,
     toast.success("Entrada adicionada à lista");
   };
 
-  // MONTADOR: Adicionar entrada manual
-  const adicionarEntradaMontador = () => {
-    if (!formMontador.nome_montador || !formMontador.boletim || !formMontador.data_montagem || !formMontador.valor_venda) {
-      toast.error("Preencha os campos obrigatórios: Montador, Boletim, Data e Valor");
-      return;
-    }
-
-    const montadorSelecionado = montadores.find(m => m.nome === formMontador.nome_montador);
-    if (!montadorSelecionado) {
-      toast.error("Montador não encontrado");
-      return;
-    }
-
-    const novaEntrada: MontadorEntry = {
-      identificador_do_montador: montadorSelecionado.identificador,
-      nome_do_montador: formMontador.nome_montador,
-      identificador_boletim_montagem: formMontador.boletim,
-      data_da_montagem: formMontador.data_montagem,
-      media_de_valor_venda: parseFloat(formMontador.valor_venda) || 0,
-      nome_do_cliente: formMontador.cliente,
-      nome_produto: formMontador.produto,
-    };
-
-    setManualEntriesMontador([...manualEntriesMontador, novaEntrada]);
-    setDataParaEnvio([...manualEntriesMontador, novaEntrada]);
-
-    // Limpar form (mantendo montador e data)
-    setFormMontador({
-      nome_montador: formMontador.nome_montador,
-      identificador: formMontador.identificador,
-      boletim: "",
-      data_montagem: formMontador.data_montagem,
-      valor_venda: "0",
-      cliente: "",
-      produto: "",
-    });
-
-    toast.success("Entrada adicionada à lista");
-  };
-
   // Upload de Excel
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -389,39 +292,22 @@ Qualquer dúvida, estamos à disposição.`,
         });
 
         // Validar colunas obrigatórias
-        if (tipoEnvio === "prestador") {
-          const required = ["nome_prestador", "periodo", "data_execucao", "o_s"];
-          const hasAllColumns = required.every(col =>
-            normalizedData.length > 0 && normalizedData[0].hasOwnProperty(col)
-          );
+        const required = ["nome_prestador", "periodo", "data_execucao", "o_s"];
+        const hasAllColumns = required.every(col =>
+          normalizedData.length > 0 && normalizedData[0].hasOwnProperty(col)
+        );
 
-          if (!hasAllColumns) {
-            toast.error(`Excel precisa das colunas: ${required.join(", ")}`);
-            return;
-          }
-
-          // Converter valores numéricos
-          normalizedData.forEach(row => {
-            row.valor_custo_prestador = parseFloat(row.valor_custo_prestador || 0);
-            row.valor_extra = parseFloat(row.valor_extra || 0);
-            row.valor_total = row.valor_custo_prestador + row.valor_extra;
-          });
-        } else {
-          const required = ["identificador_do_montador", "identificador_boletim_montagem", "data_da_montagem", "media_de_valor_venda", "nome_produto"];
-          const hasAllColumns = required.every(col =>
-            normalizedData.length > 0 && normalizedData[0].hasOwnProperty(col)
-          );
-
-          if (!hasAllColumns) {
-            toast.error(`Excel precisa das colunas: ${required.join(", ")}`);
-            return;
-          }
-
-          // Converter valores numéricos
-          normalizedData.forEach(row => {
-            row.media_de_valor_venda = parseFloat(row.media_de_valor_venda || 0);
-          });
+        if (!hasAllColumns) {
+          toast.error(`Excel precisa das colunas: ${required.join(", ")}`);
+          return;
         }
+
+        // Converter valores numéricos
+        normalizedData.forEach(row => {
+          row.valor_custo_prestador = parseFloat(row.valor_custo_prestador || 0);
+          row.valor_extra = parseFloat(row.valor_extra || 0);
+          row.valor_total = row.valor_custo_prestador + row.valor_extra;
+        });
 
         setExcelData(normalizedData);
         setDataParaEnvio(normalizedData);
@@ -433,6 +319,25 @@ Qualquer dúvida, estamos à disposição.`,
     };
 
     reader.readAsArrayBuffer(file);
+  };
+
+  // Salvar configuração de email
+  const salvarConfiguracao = async () => {
+    if (!emailConfig.assunto || !emailConfig.corpo) {
+      toast.error("Assunto e corpo são obrigatórios");
+      return;
+    }
+
+    setSavingConfig(true);
+    try {
+      await emailConfigService.saveConfig("prestador", emailConfig);
+      toast.success("✅ Configuração salva! Será usada no próximo envio.");
+    } catch (error) {
+      console.error("Erro ao salvar configuração:", error);
+      toast.error("Erro ao salvar configuração");
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   // Enviar relatórios
@@ -451,7 +356,7 @@ Qualquer dúvida, estamos à disposição.`,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo: tipoEnvio,
+          tipo: "prestador",
           dados: dataParaEnvio,
           emailConfig,
           enviarWhatsApp,
@@ -497,7 +402,6 @@ Qualquer dúvida, estamos à disposição.`,
 
         // Limpar dados
         setManualEntriesPrestador([]);
-        setManualEntriesMontador([]);
         setExcelData([]);
         setDataParaEnvio([]);
       } else {
@@ -515,29 +419,11 @@ Qualquer dúvida, estamos à disposição.`,
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Envio de Relatórios</h1>
-          <p className="text-muted-foreground">
-            Enviar relatórios de fechamento para prestadores e montadores
-          </p>
-        </div>
-
-        <Select value={tipoEnvio} onValueChange={(v: "prestador" | "montador") => {
-          setTipoEnvio(v);
-          setManualEntriesPrestador([]);
-          setManualEntriesMontador([]);
-          setExcelData([]);
-          setDataParaEnvio([]);
-        }}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="prestador">🏢 Prestadores</SelectItem>
-            <SelectItem value="montador">👷 Montadores</SelectItem>
-          </SelectContent>
-        </Select>
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Envio de Relatórios</h1>
+        <p className="text-muted-foreground">
+          Enviar relatórios de fechamento para prestadores
+        </p>
       </div>
 
       <Tabs defaultValue="manual" className="space-y-6">
@@ -547,33 +433,32 @@ Qualquer dúvida, estamos à disposição.`,
         </TabsList>
 
         <TabsContent value="manual" className="space-y-6">
-          {tipoEnvio === "prestador" ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Adicionar Boletim Manualmente</CardTitle>
-                    <CardDescription>Preencha os dados do serviço prestado</CardDescription>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={autoPreencherPrestador}
-                    disabled={prestadores.length === 0}
-                  >
-                    ✨ Auto Preencher
-                  </Button>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Adicionar Boletim Manualmente</CardTitle>
+                  <CardDescription>Preencha os dados do serviço prestado</CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Prestador *</Label>
-                    <Select
-                      value={formPrestador.nome_prestador}
-                      onValueChange={(v) => setFormPrestador({ ...formPrestador, nome_prestador: v })}
-                      disabled={loading}
-                    >
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={autoPreencherPrestador}
+                  disabled={prestadores.length === 0}
+                >
+                  ✨ Auto Preencher
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Prestador *</Label>
+                  <Select
+                    value={formPrestador.nome_prestador}
+                    onValueChange={(v) => setFormPrestador({ ...formPrestador, nome_prestador: v })}
+                    disabled={loading}
+                  >
                       <SelectTrigger>
                         <SelectValue placeholder={loading ? "Carregando..." : "Selecione..."} />
                       </SelectTrigger>
@@ -688,113 +573,9 @@ Qualquer dúvida, estamos à disposição.`,
                 </Button>
               </CardContent>
             </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Adicionar Montagem Manualmente</CardTitle>
-                    <CardDescription>Preencha os dados da montagem realizada</CardDescription>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={autoPreencherMontador}
-                    disabled={montadores.length === 0}
-                  >
-                    ✨ Auto Preencher
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Montador *</Label>
-                    <Select
-                      value={formMontador.nome_montador}
-                      onValueChange={(v) => {
-                        const montador = montadores.find(m => m.nome === v);
-                        setFormMontador({
-                          ...formMontador,
-                          nome_montador: v,
-                          identificador: montador?.identificador || ""
-                        });
-                      }}
-                      disabled={loading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={loading ? "Carregando..." : "Selecione..."} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {montadores.map((m) => (
-                          <SelectItem key={m.id} value={m.nome}>{m.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Data da Montagem *</Label>
-                    <Input
-                      type="date"
-                      value={formMontador.data_montagem}
-                      onChange={(e) => setFormMontador({ ...formMontador, data_montagem: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Boletim Montagem *</Label>
-                    <Input
-                      placeholder="BOL001"
-                      value={formMontador.boletim}
-                      onChange={(e) => setFormMontador({ ...formMontador, boletim: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Média de Valor Venda (R$) *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formMontador.valor_venda}
-                      onChange={(e) => setFormMontador({ ...formMontador, valor_venda: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Cliente</Label>
-                    <Input
-                      placeholder="Nome do cliente"
-                      value={formMontador.cliente}
-                      onChange={(e) => setFormMontador({ ...formMontador, cliente: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Nome do Produto *</Label>
-                    <Input
-                      placeholder="Cama Box, Guarda-Roupa..."
-                      value={formMontador.produto}
-                      onChange={(e) => setFormMontador({ ...formMontador, produto: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <Button onClick={adicionarEntradaMontador} className="w-full">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Adicionar à Lista
-                </Button>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Preview da lista manual */}
-          {((tipoEnvio === "prestador" && manualEntriesPrestador.length > 0) ||
-            (tipoEnvio === "montador" && manualEntriesMontador.length > 0)) && (
+          {manualEntriesPrestador.length > 0 && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -804,7 +585,6 @@ Qualquer dúvida, estamos à disposição.`,
                     size="sm"
                     onClick={() => {
                       setManualEntriesPrestador([]);
-                      setManualEntriesMontador([]);
                       setDataParaEnvio([]);
                     }}
                   >
@@ -818,53 +598,27 @@ Qualquer dúvida, estamos à disposição.`,
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {tipoEnvio === "prestador" ? (
-                          <>
-                            <TableHead>Prestador</TableHead>
-                            <TableHead>Período</TableHead>
-                            <TableHead>O.S.</TableHead>
-                            <TableHead>Cliente</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead className="text-right">Valor Total</TableHead>
-                          </>
-                        ) : (
-                          <>
-                            <TableHead>Montador</TableHead>
-                            <TableHead>Boletim</TableHead>
-                            <TableHead>Produto</TableHead>
-                            <TableHead>Cliente</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead className="text-right">Valor</TableHead>
-                          </>
-                        )}
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>O.S.</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead className="text-right">Valor Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {tipoEnvio === "prestador"
-                        ? manualEntriesPrestador.map((entry, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{entry.nome_prestador}</TableCell>
-                              <TableCell>{entry.periodo}</TableCell>
-                              <TableCell><Badge variant="outline">{entry.o_s}</Badge></TableCell>
-                              <TableCell>{entry.cliente || "-"}</TableCell>
-                              <TableCell>{entry.data_execucao}</TableCell>
-                              <TableCell className="text-right font-medium">
-                                R$ {entry.valor_total.toFixed(2)}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        : manualEntriesMontador.map((entry, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{entry.nome_do_montador}</TableCell>
-                              <TableCell><Badge variant="outline">{entry.identificador_boletim_montagem}</Badge></TableCell>
-                              <TableCell>{entry.nome_produto}</TableCell>
-                              <TableCell>{entry.nome_do_cliente || "-"}</TableCell>
-                              <TableCell>{entry.data_da_montagem}</TableCell>
-                              <TableCell className="text-right font-medium">
-                                R$ {entry.media_de_valor_venda.toFixed(2)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                      {manualEntriesPrestador.map((entry, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>{entry.nome_prestador}</TableCell>
+                          <TableCell>{entry.periodo}</TableCell>
+                          <TableCell><Badge variant="outline">{entry.o_s}</Badge></TableCell>
+                          <TableCell>{entry.cliente || "-"}</TableCell>
+                          <TableCell>{entry.data_execucao}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            R$ {entry.valor_total.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -881,9 +635,7 @@ Qualquer dúvida, estamos à disposição.`,
                 Importar Planilha Excel
               </CardTitle>
               <CardDescription>
-                {tipoEnvio === "prestador"
-                  ? "Colunas obrigatórias: nome_prestador, periodo, data_execucao, o_s"
-                  : "Colunas obrigatórias: identificador_do_montador, identificador_boletim_montagem, data_da_montagem, media_de_valor_venda, nome_produto"}
+                Colunas obrigatórias: nome_prestador, periodo, data_execucao, o_s
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -919,53 +671,25 @@ Qualquer dúvida, estamos à disposição.`,
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {tipoEnvio === "prestador" ? (
-                          <>
-                            <TableHead>Prestador</TableHead>
-                            <TableHead>Período</TableHead>
-                            <TableHead>O.S.</TableHead>
-                            <TableHead>Cliente</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead className="text-right">Valor Total</TableHead>
-                          </>
-                        ) : (
-                          <>
-                            <TableHead>Montador</TableHead>
-                            <TableHead>Boletim</TableHead>
-                            <TableHead>Produto</TableHead>
-                            <TableHead>Cliente</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead className="text-right">Valor</TableHead>
-                          </>
-                        )}
+                        <TableHead>Prestador</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>O.S.</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead className="text-right">Valor Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {excelData.map((row, idx) => (
                         <TableRow key={idx}>
-                          {tipoEnvio === "prestador" ? (
-                            <>
-                              <TableCell>{row.nome_prestador}</TableCell>
-                              <TableCell>{row.periodo}</TableCell>
-                              <TableCell><Badge variant="outline">{row.o_s}</Badge></TableCell>
-                              <TableCell>{row.cliente || "-"}</TableCell>
-                              <TableCell>{row.data_execucao}</TableCell>
-                              <TableCell className="text-right font-medium">
-                                R$ {row.valor_total?.toFixed(2) || "0.00"}
-                              </TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell>{row.identificador_do_montador}</TableCell>
-                              <TableCell><Badge variant="outline">{row.identificador_boletim_montagem}</Badge></TableCell>
-                              <TableCell>{row.nome_produto}</TableCell>
-                              <TableCell>{row.nome_do_cliente || "-"}</TableCell>
-                              <TableCell>{row.data_da_montagem}</TableCell>
-                              <TableCell className="text-right font-medium">
-                                R$ {row.media_de_valor_venda?.toFixed(2) || "0.00"}
-                              </TableCell>
-                            </>
-                          )}
+                          <TableCell>{row.nome_prestador}</TableCell>
+                          <TableCell>{row.periodo}</TableCell>
+                          <TableCell><Badge variant="outline">{row.o_s}</Badge></TableCell>
+                          <TableCell>{row.cliente || "-"}</TableCell>
+                          <TableCell>{row.data_execucao}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            R$ {row.valor_total?.toFixed(2) || "0.00"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -984,7 +708,7 @@ Qualquer dúvida, estamos à disposição.`,
           <Card className="border-2 border-primary/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                📊 Status das {tipoEnvio === "prestador" ? "O.S." : "Boletins"}
+                📊 Status das O.S.
               </CardTitle>
               <CardDescription>
                 Validação automática de blacklist e itens já enviados
@@ -1056,7 +780,7 @@ Qualquer dúvida, estamos à disposição.`,
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>{tipoEnvio === "prestador" ? "O.S." : "Boletim"}</TableHead>
+                          <TableHead>O.S.</TableHead>
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1128,6 +852,18 @@ Qualquer dúvida, estamos à disposição.`,
                 value={emailConfig.corpo}
                 onChange={(e) => setEmailConfig({ ...emailConfig, corpo: e.target.value })}
               />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={salvarConfiguracao}
+                disabled={savingConfig}
+                className="w-full"
+              >
+                {savingConfig ? "Salvando..." : "💾 Salvar Configuração"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Ao salvar, esta configuração será usada automaticamente no próximo envio.
+              </p>
             </div>
 
             <div className="flex items-center space-x-2">

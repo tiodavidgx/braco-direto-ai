@@ -203,6 +203,103 @@ def verificar_boletins_enviados(request: dict):
     sent_boletins = check_boletins_sent(boletins)
     return sent_boletins
 
+# === ENDPOINTS DE CONFIGURAÇÃO DE EMAIL ===
+
+@router.get("/email-config/{tipo}")
+def get_email_config(tipo: str):
+    """
+    Busca a última configuração de email salva para o tipo (prestador ou montador)
+    """
+    from app.database import get_db_connection
+    import psycopg2.extras
+    
+    if tipo not in ['prestador', 'montador']:
+        raise HTTPException(status_code=400, detail="Tipo deve ser 'prestador' ou 'montador'")
+    
+    with get_db_connection() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT assunto, corpo, cc, atualizado_em
+            FROM email_config
+            WHERE tipo = %s
+        """, (tipo,))
+        
+        config = cur.fetchone()
+        
+        if not config:
+            # Retornar config padrão se não existir
+            if tipo == "prestador":
+                return {
+                    "assunto": "Novo Mundo Resolve | Nota Fiscal | Período: {{periodo}} | Prestador: {{nome_prestador}}",
+                    "corpo": """Segue a relação de boletins para emissão da nota fiscal de serviços entre **{{periodo}}**.
+
+📎 Para anexar a Nota Fiscal, acesse o link abaixo:
+{{link_upload}}
+
+⚠️ Este link é válido por 30 dias.
+
+Obrigado.""",
+                    "cc": "projetos.qualidade@novomundo.com.br"
+                }
+            else:
+                return {
+                    "assunto": "Relatório de Pagamento de Montagem - Período: {{periodo_relatorio}}",
+                    "corpo": """Olá, {{nome_montador}},
+
+Segue em anexo o seu relatório de pagamento de montagens referente ao período de **{{periodo_relatorio}}**.
+
+📎 **Link para upload de documentos:** {{link_upload}}
+
+Qualquer dúvida, estamos à disposição.""",
+                    "cc": "projetos.qualidade@novomundo.com.br"
+                }
+        
+        return dict(config)
+
+@router.post("/email-config/{tipo}")
+def save_email_config(tipo: str, config: dict):
+    """
+    Salva a configuração de email para o tipo (prestador ou montador)
+    
+    Body:
+        {
+            "assunto": "...",
+            "corpo": "...",
+            "cc": "..."
+        }
+    """
+    from app.database import get_db_connection
+    import psycopg2.extras
+    
+    if tipo not in ['prestador', 'montador']:
+        raise HTTPException(status_code=400, detail="Tipo deve ser 'prestador' ou 'montador'")
+    
+    assunto = config.get('assunto', '')
+    corpo = config.get('corpo', '')
+    cc = config.get('cc', '')
+    
+    if not assunto or not corpo:
+        raise HTTPException(status_code=400, detail="Assunto e corpo são obrigatórios")
+    
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        
+        # Inserir ou atualizar
+        cur.execute("""
+            INSERT INTO email_config (tipo, assunto, corpo, cc, atualizado_em)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (tipo) 
+            DO UPDATE SET 
+                assunto = EXCLUDED.assunto,
+                corpo = EXCLUDED.corpo,
+                cc = EXCLUDED.cc,
+                atualizado_em = NOW()
+        """, (tipo, assunto, corpo, cc))
+        
+        conn.commit()
+    
+    return {"success": True, "message": "Configuração salva com sucesso"}
+
 def gerar_pdf_prestador(lote_data):
     """
     Gera PDF com design minimalista e profissional
@@ -246,8 +343,9 @@ def gerar_pdf_prestador(lote_data):
     lote_id = lote_data.get('lote_id', 'N/A')
     total_geral = float(lote_data.get('total_geral', 0))
     
-    # Criar PDF simples e clean
-    pdf_path = f"/tmp/relatorio_prestador_{lote_id}.pdf"
+    # Criar nome do arquivo com nome do prestador
+    nome_arquivo_limpo = nome_prestador.replace(' ', '_').replace('/', '_')
+    pdf_path = f"/tmp/Relatorio_{nome_arquivo_limpo}_{lote_id}.pdf"
     doc = SimpleDocTemplate(
         pdf_path,
         pagesize=landscape(A4),
@@ -407,10 +505,17 @@ def gerar_pdf_montador_html_template(envio_data):
     
     # Renderizar HTML e converter para PDF
     html_content = template.render(**envio_data)
-    pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
-    pdf_file.close()
-    HTML(string=html_content).write_pdf(pdf_file.name)
-    return pdf_file.name
+    
+    # Criar nome do arquivo com nome do montador
+    import os
+    nome_montador = envio_data.get('nome_montador', envio_data.get('montador_nome', 'N/A'))
+    lote_id = envio_data.get('id', 'temp')
+    nome_arquivo_limpo = nome_montador.replace(' ', '_').replace('/', '_')
+    pdf_filename = f"Relatorio_{nome_arquivo_limpo}_{lote_id}.pdf"
+    pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
+    
+    HTML(string=html_content).write_pdf(pdf_path)
+    return pdf_path
 
 def gerar_pdf_montador(envio_data):
     """
@@ -462,8 +567,11 @@ def gerar_pdf_montador(envio_data):
     
     html_pdf = template.render(**ctx)
     
-    # Gerar PDF usando xhtml2pdf
-    pdf_path = f"/tmp/relatorio_montador_{envio_data.get('id', 'temp')}.pdf"
+    # Criar nome do arquivo com nome do montador
+    nome_montador = envio_data.get('nome_montador', envio_data.get('montador_nome', 'N/A'))
+    lote_id = envio_data.get('id', 'temp')
+    nome_arquivo_limpo = nome_montador.replace(' ', '_').replace('/', '_')
+    pdf_path = f"/tmp/Relatorio_{nome_arquivo_limpo}_{lote_id}.pdf"
     
     with open(pdf_path, 'wb') as pdf_file:
         pisa_status = pisa.CreatePDF(html_pdf, dest=pdf_file, encoding='utf-8')
@@ -645,13 +753,13 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 import tempfile
                 import os
                 
-                # Criar arquivo PDF temporário
-                pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
-                pdf_file.close()
+                # Criar nome do arquivo com nome do prestador
+                nome_arquivo_limpo = lote['prestador_nome'].replace(' ', '_').replace('/', '_')
+                pdf_filename = f"Relatorio_{nome_arquivo_limpo}_{lote['id']}.pdf"
+                pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
                 
                 # Gerar PDF a partir do HTML
-                HTML(string=html_content).write_pdf(pdf_file.name)
-                pdf_path = pdf_file.name
+                HTML(string=html_content).write_pdf(pdf_path)
                 
                 # Montar corpo do email
                 corpo_email = f"""
@@ -770,13 +878,13 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 import tempfile
                 import os
                 
-                # Criar arquivo PDF temporário
-                pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
-                pdf_file.close()
+                # Criar nome do arquivo com nome do montador
+                nome_arquivo_limpo = envio['montador_nome'].replace(' ', '_').replace('/', '_')
+                pdf_filename = f"Relatorio_{nome_arquivo_limpo}_{envio['id']}.pdf"
+                pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
                 
                 # Gerar PDF a partir do HTML
-                HTML(string=html_content).write_pdf(pdf_file.name)
-                pdf_path = pdf_file.name
+                HTML(string=html_content).write_pdf(pdf_path)
                 
                 # Enviar email
                 corpo_email = f"""
@@ -895,6 +1003,21 @@ def enviar_lote_relatorios(request: dict):
     
     if not dados:
         raise HTTPException(status_code=400, detail="Nenhum dado para enviar")
+    
+    # Se não vier emailConfig no request, buscar do banco
+    if not email_config or not email_config.get('assunto') or not email_config.get('corpo'):
+        with get_db_connection() as conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("""
+                SELECT assunto, corpo, cc
+                FROM email_config
+                WHERE tipo = %s
+            """, (tipo,))
+            
+            config_db = cur.fetchone()
+            if config_db:
+                email_config = dict(config_db)
+                print(f"📧 Usando configuração de email salva do banco")
     
     sucesso = 0
     erros = 0
@@ -1525,10 +1648,14 @@ def enviar_lote_relatorios(request: dict):
                     
                     # Renderizar HTML e converter para PDF
                     html_content = template.render(**context)
-                    pdf_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False)
-                    pdf_file.close()
-                    HTML(string=html_content).write_pdf(pdf_file.name)
-                    pdf_path = pdf_file.name
+                    
+                    # Criar nome do arquivo com nome do prestador
+                    import os
+                    nome_arquivo_limpo = nome_destinatario.replace(' ', '_').replace('/', '_')
+                    pdf_filename = f"Relatorio_{nome_arquivo_limpo}_{lote_id}.pdf"
+                    pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
+                    
+                    HTML(string=html_content).write_pdf(pdf_path)
                 
                 else:  # montador
                     # DEBUG: Verificar valor do link_upload antes de usar no template
