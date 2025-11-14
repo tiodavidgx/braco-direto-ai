@@ -489,10 +489,26 @@ def gerar_pdf_montador_html_template(envio_data):
     from weasyprint import HTML
     import tempfile
     import base64
+    from datetime import datetime, timedelta
     
     template_path = Path(__file__).parent.parent / "templates" / "montador_template.html"
     template_content = template_path.read_text(encoding='utf-8')
     template = Template(template_content)
+    
+    # Formatar datas nos items
+    items = envio_data.get('items', [])
+    for item in items:
+        data_raw = item.get('data_montagem', item.get('data_da_montagem', '-'))
+        if isinstance(data_raw, (int, float)):
+            # Se for timestamp do Excel (dias desde 1900-01-01)
+            base_date = datetime(1899, 12, 30)
+            item['data_montagem'] = (base_date + timedelta(days=data_raw)).strftime('%d/%m/%Y')
+        elif hasattr(data_raw, 'strftime'):
+            # Se for datetime/date
+            item['data_montagem'] = data_raw.strftime('%d/%m/%Y')
+        else:
+            # Se já for string
+            item['data_montagem'] = str(data_raw)
     
     # Carregar logo e converter para base64
     logo_path = Path(__file__).parent.parent / "templates" / "LOGO-NOVO-MUNDO-PEQUENA.png"
@@ -536,9 +552,23 @@ def gerar_pdf_montador(envio_data):
     # Formatar items para o template
     items_para_pdf = []
     for item in items_raw:
+        # Formatar data corretamente
+        data_raw = item.get('data_montagem', item.get('data_da_montagem', '-'))
+        if isinstance(data_raw, (int, float)):
+            # Se for timestamp do Excel (dias desde 1900-01-01)
+            from datetime import datetime, timedelta
+            base_date = datetime(1899, 12, 30)  # Excel conta a partir de 30/12/1899
+            data_formatada = (base_date + timedelta(days=data_raw)).strftime('%d/%m/%Y')
+        elif hasattr(data_raw, 'strftime'):
+            # Se for datetime/date
+            data_formatada = data_raw.strftime('%d/%m/%Y')
+        else:
+            # Se já for string ou '-'
+            data_formatada = str(data_raw)
+        
         items_para_pdf.append({
             'boletim': item.get('boletim', item.get('identificador_boletim_montagem', '')),
-            'data_montagem': item.get('data_montagem', item.get('data_da_montagem', '-')),
+            'data_montagem': data_formatada,
             'cliente': item.get('cliente', item.get('nome_do_cliente', '-')),
             'nome_produto': item.get('nome_produto', '-'),
             'valor_venda': float(item.get('valor_venda', item.get('media_de_valor_venda', 0))),
@@ -1272,26 +1302,43 @@ def enviar_lote_relatorios(request: dict):
                     # Helper para formatar data no JSON
                     def format_data_para_pdf(data_raw):
                         """Converte data (Excel serial ou string) para formato dd/mm/yyyy"""
-                        if not data_raw:
+                        if not data_raw or data_raw == '':
                             return '-'
+                        
+                        # Se já for string formatada, retornar direto
+                        if isinstance(data_raw, str) and '/' in data_raw:
+                            return data_raw
+                            
                         try:
                             if isinstance(data_raw, (int, float)):
                                 # Número serial do Excel
                                 from datetime import timedelta
                                 excel_epoch = datetime(1899, 12, 30)
                                 data_obj = excel_epoch + timedelta(days=float(data_raw))
-                                return data_obj.strftime('%d/%m/%Y')
-                            else:
-                                # String - tentar parsear
-                                from datetime import datetime
-                                for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%dT%H:%M:%S']:
-                                    try:
-                                        data_obj = datetime.strptime(str(data_raw).split('T')[0], fmt)
-                                        return data_obj.strftime('%d/%m/%Y')
-                                    except:
-                                        continue
-                        except:
-                            pass
+                                resultado = data_obj.strftime('%d/%m/%Y')
+                                print(f"   🔄 Convertendo data Excel {data_raw} → {resultado}")
+                                return resultado
+                            elif isinstance(data_raw, str):
+                                # Tentar converter string numérica do Excel
+                                try:
+                                    data_num = float(data_raw)
+                                    from datetime import timedelta
+                                    excel_epoch = datetime(1899, 12, 30)
+                                    data_obj = excel_epoch + timedelta(days=data_num)
+                                    resultado = data_obj.strftime('%d/%m/%Y')
+                                    print(f"   🔄 Convertendo string Excel '{data_raw}' → {resultado}")
+                                    return resultado
+                                except ValueError:
+                                    # Não é número, tentar parsear como data
+                                    for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%Y-%m-%dT%H:%M:%S']:
+                                        try:
+                                            data_obj = datetime.strptime(str(data_raw).split('T')[0], fmt)
+                                            return data_obj.strftime('%d/%m/%Y')
+                                        except:
+                                            continue
+                        except Exception as e:
+                            print(f"   ⚠️ Erro ao converter data '{data_raw}': {e}")
+                        
                         return str(data_raw)
                     
                     # Criar envio de montagem (salva detalhes em JSONB, não tabela separada)
@@ -1318,37 +1365,17 @@ def enviar_lote_relatorios(request: dict):
                         "total_geral": sum(float(item.get('media_de_valor_venda', 0)) * percentual_comissao for item in itens) + sum(float(item.get('adicional', 0)) for item in itens) + total_auxilio
                     }
                     
-                    # Verificar se já existe envio para este período e atualizar ao invés de inserir
+                    # SEMPRE criar novo registro (não reutilizar por período)
+                    # Cada envio deve ter seu próprio lote e link único
                     cur.execute("""
-                        SELECT id FROM envios_montagem 
-                        WHERE montador_id = %s 
-                        AND detalhes->>'periodo_relatorio' = %s
-                    """, (destinatario_id, periodo_relatorio))
-                    
-                    envio_existente = cur.fetchone()
-                    if envio_existente:
-                        # Atualizar registro existente
-                        lote_id = envio_existente['id']
-                        cur.execute("""
-                            UPDATE envios_montagem 
-                            SET periodo = %s, 
-                                valor_total = %s, 
-                                data_envio = NOW(), 
-                                quantidade_os = %s, 
-                                detalhes = %s
-                            WHERE id = %s
-                        """, (periodo, detalhes_json['total_geral'], len(itens), psycopg2.extras.Json(detalhes_json), lote_id))
-                        print(f"   ✅ Envio #{lote_id} atualizado no banco (período: {periodo_relatorio})")
-                    else:
-                        # Criar novo registro
-                        cur.execute("""
-                            INSERT INTO envios_montagem 
-                            (montador_id, montador_nome, periodo, valor_total, data_envio, status, quantidade_os, detalhes)
-                            VALUES (%s, %s, %s, %s, NOW(), 'Em Aberto', %s, %s)
-                            RETURNING id
-                        """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], len(itens), psycopg2.extras.Json(detalhes_json)))
-                        lote_id = cur.fetchone()['id']
-                        print(f"   ✅ Envio #{lote_id} criado no banco (período: {periodo_relatorio})")
+                        INSERT INTO envios_montagem 
+                        (montador_id, montador_nome, periodo, valor_total, data_envio, status, quantidade_os, detalhes)
+                        VALUES (%s, %s, %s, %s, NOW(), 'Em Aberto', %s, %s)
+                        RETURNING id
+                    """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], len(itens), psycopg2.extras.Json(detalhes_json)))
+                    lote_id = cur.fetchone()['id']
+                    print(f"   ✅ Novo envio #{lote_id} criado no banco (período: {periodo_relatorio})")
+
                 
                 conn.commit()
                 
@@ -1360,8 +1387,9 @@ def enviar_lote_relatorios(request: dict):
                         API_UPLOAD_URL = "http://api.link.dev.br/dvprocessamento/"
                         API_UPLOAD_KEY = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
                         
-                        # Preparar payload para API (usar ID com offset para montadores)
-                        lote_id_api = 876231 + lote_id
+                        # ID do banco já começa em 100000+ (sequence configurada)
+                        # Usar diretamente sem offset adicional
+                        print(f"   🆔 ID para API: {lote_id}")
                         
                         payload_api = {
                             "nome": nome_destinatario,
@@ -1370,7 +1398,7 @@ def enviar_lote_relatorios(request: dict):
                             "valor_total": float(detalhes_json['total_geral']),
                             "quantidade_os": len(itens),
                             "data_envio": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            "lote_id": lote_id_api,
+                            "lote_id": lote_id,
                             "tipo": "montagem"
                         }
                         
@@ -1383,7 +1411,7 @@ def enviar_lote_relatorios(request: dict):
                             "X-API-Key": API_UPLOAD_KEY
                         }
                         
-                        print(f"   📤 Enviando para API para gerar link (ID: {lote_id_api})...")
+                        print(f"   📤 Enviando para API para gerar link (ID: {lote_id})...")
                         response_api = requests.post(
                             API_UPLOAD_URL,
                             json=payload_api,
@@ -1398,46 +1426,103 @@ def enviar_lote_relatorios(request: dict):
                                 id_controle_api = resposta_api.get('id_controle') or resposta_api.get('id')
                                 link_upload = resposta_api.get('link')
                                 upload_hash = resposta_api.get('hash')  # ✅ CRÍTICO: Pegar o hash da resposta
+                                validade_link = resposta_api.get('validade_link')  # ✅ Pegar validade do link
                                 
                                 print(f"   ✅ Enviado para API - ID Controle: {id_controle_api}")
                                 print(f"   ✅ Link gerado: {link_upload}")
                                 print(f"   ✅ Hash: {upload_hash}")
+                                print(f"   ✅ Validade: {validade_link}")
                                 
-                                # Salvar id_controle, link e hash no banco
+                                # Salvar id_controle, link, hash e validade no banco
                                 with get_db_connection() as conn_update:
                                     cur_update = conn_update.cursor()
                                     cur_update.execute("""
                                         UPDATE envios_montagem 
-                                        SET id_controle = %s, link_upload = %s, upload_hash = %s, data_envio_api = NOW()
+                                        SET id_controle = %s, link_upload = %s, upload_hash = %s, validade_link = %s, data_envio_api = NOW()
                                         WHERE id = %s
-                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
+                                    """, (id_controle_api, link_upload, upload_hash, validade_link, lote_id))
                                     conn_update.commit()
                             else:
                                 print(f"   ⚠️ API retornou erro: {resposta_api.get('message')}")
                                 print(f"   📦 Resposta completa: {resposta_api}")
                                 link_upload = None
                         elif response_api.status_code == 409:
-                            # Conflito - registro já existe, buscar link existente
+                            # Conflito - registro já existe
                             resposta_api = response_api.json()
-                            print(f"   ⚠️ Registro já existe na API (ID: {resposta_api.get('existing_id')})")
-                            print(f"   🔍 Buscando link existente no banco...")
+                            link_existente = resposta_api.get('link')
+                            hash_existente = resposta_api.get('hash')
+                            id_controle_existente = resposta_api.get('id_controle') or resposta_api.get('existing_id')
                             
-                            # Buscar link do banco
-                            with get_db_connection() as conn_link:
-                                cur_link = conn_link.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                                cur_link.execute("""
-                                    SELECT link_upload, id_controle 
-                                    FROM envios_montagem 
-                                    WHERE id = %s
-                                """, (lote_id,))
-                                registro_existente = cur_link.fetchone()
+                            print(f"   ⚠️ Registro já existe na API (ID Controle: {id_controle_existente})")
+                            
+                            if link_existente:
+                                # API retornou o link existente na resposta de conflito
+                                link_upload = link_existente
+                                upload_hash = hash_existente
+                                id_controle_api = id_controle_existente
+                                print(f"   ✅ Link recuperado da resposta: {link_upload}")
                                 
-                                if registro_existente and registro_existente['link_upload']:
-                                    link_upload = registro_existente['link_upload']
-                                    print(f"   ✅ Link recuperado do banco: {link_upload}")
-                                else:
-                                    print(f"   ⚠️ Link não encontrado no banco, será usado fallback")
-                                    link_upload = None
+                                # Atualizar banco com os dados recuperados
+                                with get_db_connection() as conn_update:
+                                    cur_update = conn_update.cursor()
+                                    cur_update.execute("""
+                                        UPDATE envios_montagem 
+                                        SET id_controle = %s, link_upload = %s, upload_hash = %s
+                                        WHERE id = %s
+                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
+                                    conn_update.commit()
+                            else:
+                                # Se não veio link na resposta, buscar do banco
+                                print(f"   🔍 Buscando link existente no banco...")
+                                with get_db_connection() as conn_link:
+                                    cur_link = conn_link.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                                    cur_link.execute("""
+                                        SELECT link_upload, id_controle, upload_hash
+                                        FROM envios_montagem 
+                                        WHERE id = %s
+                                    """, (lote_id,))
+                                    registro_existente = cur_link.fetchone()
+                                    
+                                    if registro_existente and registro_existente['link_upload']:
+                                        link_upload = registro_existente['link_upload']
+                                        upload_hash = registro_existente['upload_hash']
+                                        print(f"   ✅ Link recuperado do banco: {link_upload}")
+                                    else:
+                                        print(f"   ❌ Link não encontrado! Tentando recriar na API...")
+                                        # Tentar com ID diferente (adicionar timestamp)
+                                        import time
+                                        lote_id_novo = int(f"{lote_id}{int(time.time()) % 1000}")
+                                        payload_api["lote_id"] = lote_id_novo
+                                        
+                                        response_retry = requests.post(
+                                            API_UPLOAD_URL,
+                                            json=payload_api,
+                                            headers=headers_api,
+                                            timeout=10,
+                                            verify=False
+                                        )
+                                        
+                                        if response_retry.status_code in [200, 201]:
+                                            resposta_retry = response_retry.json()
+                                            if resposta_retry.get('success'):
+                                                link_upload = resposta_retry.get('link')
+                                                upload_hash = resposta_retry.get('hash')
+                                                id_controle_api = resposta_retry.get('id_controle')
+                                                print(f"   ✅ Novo link gerado: {link_upload}")
+                                                
+                                                # Atualizar banco
+                                                with get_db_connection() as conn_update:
+                                                    cur_update = conn_update.cursor()
+                                                    cur_update.execute("""
+                                                        UPDATE envios_montagem 
+                                                        SET id_controle = %s, link_upload = %s, upload_hash = %s
+                                                        WHERE id = %s
+                                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
+                                                    conn_update.commit()
+                                            else:
+                                                link_upload = None
+                                        else:
+                                            link_upload = None
                         else:
                             print(f"   ⚠️ API respondeu com status {response_api.status_code}")
                             print(f"   📦 Resposta: {response_api.text[:200]}")

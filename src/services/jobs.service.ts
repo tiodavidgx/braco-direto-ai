@@ -99,4 +99,16 @@ export const jobsService = {
     const response = await apiClient.get('/jobs/logs') as { data: { logs: string } };
     return response.data;
   },
+
+  // Trello Montadores
+  async executarTrelloMontadores() {
+    const response = await apiClient.post<any>('/jobs/trello-montadores/executar');
+    return response;
+  },
+
+  async getResultadoTrelloMontadores(): Promise<JobResult> {
+    const response = await apiClient.get<JobResult>('/jobs/trello-montadores/resultado');
+    return response;
+  }
 };
+

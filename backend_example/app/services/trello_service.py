@@ -199,6 +199,38 @@ class TrelloIntegration:
             if arquivos_baixados:
                 self._criar_checklist(card_id, arquivos_baixados)
             
+            # Enviar notificação de integração com Trello
+            try:
+                import asyncio
+                from app.routes.notifications import notification_manager
+                
+                nome_entidade = prestador_nome if prestador_nome else montador_nome
+                tipo_entidade = "Prestador" if prestador_nome else "Montador"
+                
+                # Criar e executar a tarefa assíncrona
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    notification_manager.send_notification(
+                        tipo="info",
+                        titulo="🔗 Integrado no Trello",
+                        mensagem=f"{tipo_entidade} {nome_entidade} - Lote #{lote_id}",
+                        dados={
+                            "lote_id": lote_id,
+                            "tipo": tipo_entidade.lower(),
+                            "nome": nome_entidade,
+                            "card_url": card_url,
+                            "valor": valor_lote
+                        }
+                    )
+                )
+                loop.close()
+                print(f"✅ Notificação Trello enviada: {nome_entidade}")
+            except Exception as e:
+                print(f"⚠️  Erro ao enviar notificação Trello: {e}")
+                import traceback
+                traceback.print_exc()
+            
             # Anexa arquivos reais
             if arquivos_para_anexar:
                 print(f"📎 Anexando {len(arquivos_para_anexar)} arquivo(s) ao card...")

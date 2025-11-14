@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import database as db
 from consulta_nf_client import ConsultaNFClient
-from integracoes.trello_integration import TrelloIntegration
+from trello_integration import TrelloIntegration
 import time
 import logging
 
@@ -133,7 +133,6 @@ def processar_uploads_pendentes():
                 
                 # Baixar cada arquivo
                 pasta_destino = f"uploads/lote_{lote_id}"
-                import os
                 os.makedirs(pasta_destino, exist_ok=True)
                 
                 for arquivo in arquivos:
@@ -309,61 +308,86 @@ def processar_uploads_pendentes():
             
             logger.info(f"   📊 Status: {nota['status_descricao']}")
             logger.info(f"   📁 Arquivos encontrados: {stats['total_arquivos']}")
+            logger.info(f"   🎯 TESTE: arquivos type = {type(arquivos)}")
+            logger.info(f"   🎯 TESTE: arquivos = {arquivos}")
             
             # Processar arquivos
-            if len(arquivos) > 0:
+            arquivos_len = len(arquivos) if arquivos else 0
+            logger.info(f"   🎯 TESTE: len = {arquivos_len}")
+            if arquivos_len > 0:
                 arquivos_encontrados += 1
                 logger.info(f"   📦 Total: {stats['total_tamanho_formatado']}")
+                logger.info(f"   🔍 DEBUG MONTADOR: {len(arquivos)} arquivo(s) encontrado(s)!")
                 
                 # Verificar se já foi processado
                 status_arquivo_atual = envio.get('status_arquivo', 0)
                 ja_processado = status_arquivo_atual == 2
+                logger.info(f"   🔍 DEBUG: status_arquivo = {status_arquivo_atual}, ja_processado = {ja_processado}")
                 
+                # Se já foi processado, pular download mas CRIAR TRELLO se não foi criado ainda
                 if ja_processado:
                     logger.info(f"   ℹ️  Arquivos já foram baixados anteriormente")
-                    continue
-                
-                # Baixar cada arquivo
-                pasta_destino = f"uploads/montagem_{envio_id}"
-                import os
-                os.makedirs(pasta_destino, exist_ok=True)
-                
-                for arquivo in arquivos:
-                    nome_arquivo = arquivo['nome_original']
-                    caminho_local = os.path.join(pasta_destino, nome_arquivo)
+                    # NÃO faz continue aqui! Continua para criar Trello
+                else:
+                    # Baixar arquivos pela primeira vez
+                    # Baixar cada arquivo
+                    pasta_destino = f"uploads/montagem_{envio_id}"
+                    os.makedirs(pasta_destino, exist_ok=True)
                     
-                    # Verificar se arquivo já existe
-                    if os.path.exists(caminho_local):
-                        logger.info(f"   ✓ Já existe: {nome_arquivo}")
-                        downloads_realizados += 1
-                        continue
+                    for arquivo in arquivos:
+                        nome_arquivo = arquivo['nome_original']
+                        caminho_local = os.path.join(pasta_destino, nome_arquivo)
+                        
+                        # Verificar se arquivo já existe
+                        if os.path.exists(caminho_local):
+                            logger.info(f"   ✓ Já existe: {nome_arquivo}")
+                            downloads_realizados += 1
+                            continue
+                        
+                        logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
+                        
+                        sucesso_download, mensagem = client.baixar_arquivo(
+                            arquivo['link_download'],
+                            caminho_local
+                        )
+                        
+                        if sucesso_download:
+                            downloads_realizados += 1
+                        else:
+                            logger.info(f"      ❌ {mensagem}")
+                            erros += 1
                     
-                    logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
+                    # Atualizar status do arquivo para "baixado"
+                    try:
+                        logger.info(f"   🔄 Atualizando status_arquivo para 2...")
+                        db.atualizar_status_arquivo_montagem(envio_id, 2)
+                        logger.info(f"   ✅ Status atualizado: Arquivos baixados")
+                    except Exception as e:
+                        logger.info(f"   ❌ ERRO ao atualizar status_arquivo: {e}")
+                        import traceback
+                        traceback.print_exc()
                     
-                    sucesso_download, mensagem = client.baixar_arquivo(
-                        arquivo['link_download'],
-                        caminho_local
-                    )
+                    # Salvar primeiro arquivo como nota_fiscal_path
+                    if arquivos:
+                        try:
+                            primeiro_arquivo = os.path.join(pasta_destino, arquivos[0]['nome_original'])
+                            logger.info(f"   💾 Salvando nota fiscal: {primeiro_arquivo}")
+                            db.salvar_nota_fiscal_montagem(envio_id, primeiro_arquivo)
+                            logger.info(f"   ✅ Nota fiscal salva: {arquivos[0]['nome_original']}")
+                        except Exception as e:
+                            logger.info(f"   ❌ ERRO ao salvar nota fiscal: {e}")
+                            import traceback
+                            traceback.print_exc()
                     
-                    if sucesso_download:
-                        downloads_realizados += 1
-                    else:
-                        logger.info(f"      ❌ {mensagem}")
-                        erros += 1
-                
-                # Atualizar status do arquivo para "baixado"
-                db.atualizar_status_arquivo_montagem(envio_id, 2)
-                logger.info(f"   ✅ Status atualizado: Arquivos baixados")
-                
-                # Salvar primeiro arquivo como nota_fiscal_path
-                if arquivos:
-                    primeiro_arquivo = os.path.join(pasta_destino, arquivos[0]['nome_original'])
-                    db.salvar_nota_fiscal_montagem(envio_id, primeiro_arquivo)
-                    logger.info(f"   ✅ Nota fiscal salva: {arquivos[0]['nome_original']}")
-                
-                # Atualizar status do envio para "N.F RECEBIDA"
-                db.update_montagem_status(envio_id, 'N.F RECEBIDA')
-                logger.info(f"   ✅ Status do envio atualizado: N.F RECEBIDA")
+                    # Atualizar status do envio para "N.F RECEBIDA"
+                    try:
+                        logger.info(f"   🔄 Atualizando status do envio...")
+                        db.update_montagem_status(envio_id, 'N.F RECEBIDA')
+                        logger.info(f"   ✅ Status do envio atualizado: N.F RECEBIDA")
+                    except Exception as e:
+                        logger.info(f"   ❌ ERRO ao atualizar status do envio: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # **NOVO: Calcular e registrar data de vencimento do pagamento**
                 from datetime import datetime as dt
@@ -372,75 +396,124 @@ def processar_uploads_pendentes():
                 logger.info(f"   📅 Data de vencimento do pagamento calculada")
                 
                 # Criar notificação
-                total_arqs = len(arquivos)
-                titulo = f"📥 Nota Fiscal Recebida - Montador #{envio_id}"
-                mensagem_notif = f"{montador} enviou {total_arqs} arquivo(s) da nota fiscal ({stats['total_tamanho_formatado']})"
-                
-                db.criar_notificacao(
-                    tipo='nf_recebida_montador',
-                    titulo=titulo,
-                    mensagem=mensagem_notif,
-                    lote_id=envio_id,  # Usando envio_id no campo lote_id
-                    icone='📥',
-                    prioridade=1
-                )
-                logger.info(f"   🔔 Notificação criada")
-                
-                # 🎯 INTEGRAÇÃO TRELLO: Criar card automaticamente para montadores
                 try:
-                    trello = TrelloIntegration()
-                    if trello.is_configured():
-                        logger.info(f"   📋 Criando card no Trello para montador...")
-                        
-                        # Obter número da nota fiscal (se disponível)
-                        nota_fiscal = None
-                        if nota.get('numero_nota'):
-                            nota_fiscal = nota['numero_nota']
-                        
-                        # Lista de nomes dos arquivos baixados
-                        arquivos_baixados = [arq['nome_original'] for arq in arquivos]
-                        logger.info(f"   🔍 DEBUG: arquivos_baixados = {arquivos_baixados}")
-                        
-                        # Caminhos reais dos arquivos baixados
-                        arquivos_para_anexar = [os.path.join(pasta_destino, arq['nome_original']) for arq in arquivos]
-                        logger.info(f"   🔍 DEBUG: arquivos_para_anexar = {arquivos_para_anexar}")
-                        
-                        # Log detalhado dos arquivos para anexar
-                        logger.info(f"   📎 Arquivos para anexar no Trello:")
-                        for caminho in arquivos_para_anexar:
-                            existe = os.path.isfile(caminho)
-                            logger.info(f"      {'✅' if existe else '❌'} {caminho}")
-                        
-                        logger.info(f"   🎯 DEBUG: Chamando criar_card_download com {len(arquivos_para_anexar)} arquivos...")
-                        
-                        # Obter valor do envio
-                        valor_envio = envio.get('valor_total', 0)
-                        
-                        # Criar card (usar envio_id como lote_id, passar montador_nome)
-                        card_result = trello.criar_card_download(
-                            lote_id=envio_id,
-                            prestador_nome=None,  # Não é prestador
-                            montador_nome=montador,
-                            arquivos_baixados=arquivos_baixados,
-                            nota_fiscal=nota_fiscal,
-                            arquivos_para_anexar=arquivos_para_anexar,
-                            valor_lote=valor_envio
-                        )
-                        
-                        if card_result:
-                            logger.info(f"   ✅ Card Trello criado: {card_result['shortUrl']}")
-                            
-                            # Salvar ID do card no banco (opcional)
-                            # TODO: Adicionar campo trello_card_id em envios_montagem se necessário
-                        else:
-                            logger.info(f"   ⚠️  Não foi possível criar card no Trello")
-                    else:
-                        logger.info(f"   ℹ️  Integração Trello não configurada")
+                    total_arqs = len(arquivos)
+                    titulo = f"📥 Nota Fiscal Recebida - Montador #{envio_id}"
+                    mensagem_notif = f"{montador} enviou {total_arqs} arquivo(s) da nota fiscal ({stats['total_tamanho_formatado']})"
+                    
+                    logger.info(f"   🔔 Criando notificação no banco...")
+                    db.criar_notificacao(
+                        tipo='nf_recebida_montador',
+                        titulo=titulo,
+                        mensagem=mensagem_notif,
+                        lote_id=envio_id,  # Usando envio_id no campo lote_id
+                        icone='📥',
+                        prioridade=1
+                    )
+                    logger.info(f"   ✅ Notificação criada no banco")
                 except Exception as e:
-                    logger.info(f"   ⚠️  Erro ao criar card Trello: {e}")
+                    logger.info(f"   ❌ ERRO ao criar notificação: {e}")
                     import traceback
                     traceback.print_exc()
-                    # Não interrompe o fluxo se houver erro no Trello
+                
+                # Enviar notificação WebSocket para o frontend
+                try:
+                    import asyncio
+                    import sys
+                    sys.path.insert(0, str(Path(__file__).parent.parent / 'backend_example'))
+                    from app.routes.notifications import send_notification
+                    
+                    logger.info(f"   📡 Enviando notificação WebSocket...")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(send_notification(
+                        tipo='success',
+                        titulo=titulo,
+                        mensagem=mensagem_notif,
+                        dados={'lote_id': envio_id, 'tipo': 'montador'}
+                    ))
+                    loop.close()
+                    logger.info(f"   ✅ Notificação WebSocket enviada")
+                except Exception as e:
+                    logger.info(f"   ⚠️  Erro ao enviar notificação WebSocket: {e}")
+                    # Não é crítico, continua
+                
+                # 🎯 INTEGRAÇÃO TRELLO: Criar card automaticamente para montadores
+                # Verificar se já foi criado
+                trello_card_criado = envio.get('trello_card_criado', False)
+                
+                if not trello_card_criado:
+                    logger.info(f"   🎯 INICIANDO INTEGRAÇÃO TRELLO PARA MONTADOR...")
+                    try:
+                        logger.info(f"   🔧 Criando instância TrelloIntegration...")
+                        trello = TrelloIntegration()
+                        logger.info(f"   🔧 Verificando se está configurado...")
+                        if trello.is_configured():
+                            logger.info(f"   ✅ Trello ESTÁ configurado!")
+                            logger.info(f"   📋 Criando card no Trello para montador...")
+                            
+                            # Pasta onde os arquivos foram baixados
+                            pasta_destino = f"uploads/montagem_{envio_id}"
+                            
+                            # Obter número da nota fiscal (se disponível)
+                            nota_fiscal = None
+                            if nota.get('numero_nota'):
+                                nota_fiscal = nota['numero_nota']
+                            
+                            # Lista de nomes dos arquivos baixados
+                            arquivos_baixados = [arq['nome_original'] for arq in arquivos]
+                            logger.info(f"   🔍 DEBUG: arquivos_baixados = {arquivos_baixados}")
+                            
+                            # Caminhos reais dos arquivos baixados
+                            arquivos_para_anexar = [os.path.join(pasta_destino, arq['nome_original']) for arq in arquivos]
+                            logger.info(f"   🔍 DEBUG: arquivos_para_anexar = {arquivos_para_anexar}")
+                            
+                            # Log detalhado dos arquivos para anexar
+                            logger.info(f"   📎 Arquivos para anexar no Trello:")
+                            for caminho in arquivos_para_anexar:
+                                existe = os.path.isfile(caminho)
+                                logger.info(f"      {'✅' if existe else '❌'} {caminho}")
+                            
+                            logger.info(f"   🎯 DEBUG: Chamando criar_card_download com {len(arquivos_para_anexar)} arquivos...")
+                            
+                            # Obter valor do envio
+                            valor_envio = envio.get('valor_total', 0)
+                            
+                            # Criar card (usar envio_id como lote_id, passar montador_nome)
+                            card_result = trello.criar_card_download(
+                                lote_id=envio_id,
+                                prestador_nome=None,  # Não é prestador
+                                montador_nome=montador,
+                                arquivos_baixados=arquivos_baixados,
+                                nota_fiscal=nota_fiscal,
+                                arquivos_para_anexar=arquivos_para_anexar,
+                                valor_lote=valor_envio
+                            )
+                            
+                            if card_result:
+                                logger.info(f"   ✅ Card Trello criado: {card_result['shortUrl']}")
+                                
+                                # Marcar como criado no banco
+                                conn_trello = db.get_db_connection()
+                                cur_trello = conn_trello.cursor()
+                                cur_trello.execute(
+                                    "UPDATE envios_montagem SET trello_card_criado = TRUE WHERE id = %s",
+                                    (envio_id,)
+                                )
+                                conn_trello.commit()
+                                cur_trello.close()
+                                conn_trello.close()
+                            else:
+                                logger.info(f"   ⚠️  Não foi possível criar card no Trello")
+                        else:
+                            logger.info(f"   ℹ️  Integração Trello não configurada")
+                    except Exception as e:
+                        logger.info(f"   ⚠️  Erro ao criar card Trello: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Não interrompe o fluxo se houver erro no Trello
+                else:
+                    logger.info(f"   ℹ️  Card Trello já foi criado anteriormente")
                 
             elif nota['link_valido']:
                 logger.info(f"   ⏳ Aguardando upload do montador")

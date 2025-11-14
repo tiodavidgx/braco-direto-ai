@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { NotificationContainer } from "@/components/NotificationContainer";
 import Dashboard from "./pages/Dashboard";
 import Prestadores from "./pages/Prestadores";
 import Montadores from "./pages/Montadores";
@@ -27,6 +28,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <NotificationContainer />
       <BrowserRouter>
         <SidebarProvider>
           <div className="flex min-h-screen w-full bg-background">

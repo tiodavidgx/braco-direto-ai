@@ -22,6 +22,12 @@ job_status = {
         'last_run': None,
         'last_result': None,
         'error': None
+    },
+    'trello_montadores': {
+        'running': False,
+        'last_run': None,
+        'last_result': None,
+        'error': None
     }
 }
 
@@ -345,8 +351,80 @@ def get_scheduler_logs():
             lines = f.readlines()
             # Últimas 50 linhas
             recent_lines = lines[-50:]
-            log_text = ''.join(recent_lines)
-        
-        return {"logs": log_text}
+            return {"logs": "".join(recent_lines)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== JOB TRELLO MONTADORES =====
+
+@router.post("/trello-montadores/executar")
+async def executar_job_trello_montadores():
+    """Executa o job de criar cards Trello para montadores"""
+    
+    if job_status['trello_montadores']['running']:
+        raise HTTPException(status_code=409, detail="Job já está em execução")
+    
+    try:
+        # Executar em thread separada
+        def run_job():
+            import subprocess
+            from pathlib import Path
+            
+            job_status['trello_montadores']['running'] = True
+            job_status['trello_montadores']['error'] = None
+            
+            try:
+                script_path = Path(__file__).parent.parent.parent.parent / "sistema_original" / "criar_cards_trello_montadores.py"
+                
+                result = subprocess.run(
+                    ["python3", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minutos
+                )
+                
+                job_status['trello_montadores']['last_result'] = {
+                    'stdout': result.stdout,
+                    'stderr': result.stderr,
+                    'returncode': result.returncode,
+                    'success': result.returncode == 0
+                }
+                job_status['trello_montadores']['last_run'] = datetime.now().isoformat()
+            except Exception as e:
+                job_status['trello_montadores']['error'] = str(e)
+            finally:
+                job_status['trello_montadores']['running'] = False
+        
+        thread = threading.Thread(target=run_job, daemon=True)
+        thread.start()
+        
+        return {
+            "success": True,
+            "message": "Job iniciado com sucesso",
+            "status": "running"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao iniciar job: {str(e)}")
+
+
+@router.get("/trello-montadores/resultado")
+async def get_resultado_trello_montadores():
+    """Retorna o resultado do último job executado"""
+    
+    status = job_status['trello_montadores']
+    
+    if not status['last_run'] and not status['running']:
+        return {
+            "status": "never_run",
+            "message": "Job nunca foi executado"
+        }
+    
+    return {
+        "status": "running" if status['running'] else "completed",
+        "last_run": status['last_run'],
+        "result": status['last_result'],
+        "error": status['error']
+    }
+

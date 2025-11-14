@@ -9,6 +9,7 @@ from typing import Optional
 import requests
 import os
 from dotenv import load_dotenv
+from app.database import get_db_connection
 
 load_dotenv()
 
@@ -173,3 +174,106 @@ def get_status_upload(hash: str):
     Consulta status de um upload pelo hash (via GET)
     """
     return consultar_status_upload(ConsultarStatusRequest(hash=hash))
+
+@router.post("/webhook/nf-recebida")
+async def webhook_nf_recebida(data: dict):
+    """
+    Webhook para receber notificação quando NF for enviada
+    
+    Payload esperado:
+    {
+        "lote_id": 123,
+        "tipo": "lote" ou "montagem",
+        "hash": "abc123",
+        "nota_fiscal": "arquivo.pdf",
+        "data_upload": "2025-11-12T10:30:00"
+    }
+    """
+    try:
+        lote_id = data.get("lote_id")
+        tipo = data.get("tipo")
+        nota_fiscal = data.get("nota_fiscal")
+        hash_upload = data.get("hash")
+        
+        # ID já vem correto do banco (montadores >= 100000, prestadores < 100000)
+        # Não precisa fazer conversão
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Atualizar status no banco
+            if tipo == "lote":
+                cursor.execute("""
+                    UPDATE lotes_servico 
+                    SET status_api = 1,
+                        data_recebimento_nf = NOW(),
+                        nota_fiscal_path = %s
+                    WHERE id = %s
+                    RETURNING prestador_nome, periodo, valor_total
+                """, (nota_fiscal, lote_id))
+                
+                result = cursor.fetchone()
+                if result:
+                    nome, periodo, valor = result
+                    
+                    # Enviar notificação em tempo real
+                    from app.routes.notifications import notification_manager
+                    await notification_manager.send_notification(
+                        tipo="success",
+                        titulo="📄 Nota Fiscal Recebida",
+                        mensagem=f"{nome} enviou a NF do período {periodo}",
+                        dados={
+                            "lote_id": lote_id,
+                            "tipo": "prestador",
+                            "nome": nome,
+                            "periodo": periodo,
+                            "valor": valor,
+                            "nota_fiscal": nota_fiscal
+                        }
+                    )
+            
+            elif tipo == "montagem":
+                cursor.execute("""
+                    UPDATE envios_montagem 
+                    SET status_api = 1,
+                        data_recebimento_nf = NOW(),
+                        nota_fiscal_path = %s
+                    WHERE id = %s
+                    RETURNING montador_nome, periodo, valor_total
+                """, (nota_fiscal, lote_id))
+                
+                result = cursor.fetchone()
+                if result:
+                    nome, periodo, valor = result
+                    
+                    # Enviar notificação em tempo real
+                    from app.routes.notifications import notification_manager
+                    await notification_manager.send_notification(
+                        tipo="success",
+                        titulo="📄 Nota Fiscal Recebida",
+                        mensagem=f"{nome} enviou a NF do período {periodo}",
+                        dados={
+                            "lote_id": lote_id,
+                            "tipo": "montador",
+                            "nome": nome,
+                            "periodo": periodo,
+                            "valor": valor,
+                            "nota_fiscal": nota_fiscal
+                        }
+                    )
+            
+            conn.commit()
+        
+        return {
+            "success": True,
+            "message": "NF processada e notificação enviada",
+            "lote_id": lote_id,
+            "tipo": tipo
+        }
+    
+    except Exception as e:
+        print(f"❌ Erro no webhook: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+

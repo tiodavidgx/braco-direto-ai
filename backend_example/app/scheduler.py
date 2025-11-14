@@ -54,6 +54,13 @@ def criar_tabela_jobs_config():
             ON CONFLICT (nome) DO NOTHING
         """)
         
+        # Inserir job de Trello Montadores
+        cursor.execute("""
+            INSERT INTO jobs_config (nome, descricao, ativo, intervalo_minutos)
+            VALUES ('trello_montadores', 'Processa montadores e cria cards no Trello', TRUE, 15)
+            ON CONFLICT (nome) DO NOTHING
+        """)
+        
         conn.commit()
         logger.info("✅ Tabela jobs_config criada/verificada")
 
@@ -87,8 +94,8 @@ def atualizar_estatisticas_job(nome: str, sucesso: bool, mensagem: str = None):
 
 
 def executar_job_consulta_notas():
-    """Função que será executada pelo scheduler"""
-    logger.info("🔄 Iniciando job de consulta de notas...")
+    """Executa job de consulta de notas fiscais"""
+    logger.info("� Iniciando job: Consulta de Notas Fiscais")
     
     try:
         from app.jobs.consultar_notas import processar_uploads_pendentes
@@ -119,6 +126,47 @@ def executar_job_consulta_notas():
         logger.error(f"❌ Job falhou: {mensagem}")
         atualizar_estatisticas_job('consulta_notas', False, mensagem)
         raise
+
+
+def executar_job_trello_montadores():
+    """Executa job de criação de cards Trello para montadores"""
+    logger.info("🔨 Iniciando job: Trello Montadores")
+    
+    try:
+        import subprocess
+        from pathlib import Path
+        
+        script_path = Path(__file__).parent.parent.parent / "sistema_original" / "criar_cards_trello_montadores.py"
+        
+        resultado = subprocess.run(
+            ["python3", str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if resultado.returncode == 0:
+            mensagem = f"Sucesso - {resultado.stdout.count('✅ Card:') if resultado.stdout else 0} cards criados"
+            logger.info(f"✅ Job concluído: {mensagem}")
+            atualizar_estatisticas_job('trello_montadores', True, mensagem)
+        else:
+            mensagem = f"Erro: {resultado.stderr}"
+            logger.error(f"❌ Job falhou: {mensagem}")
+            atualizar_estatisticas_job('trello_montadores', False, mensagem)
+        
+        return {
+            'success': resultado.returncode == 0,
+            'stdout': resultado.stdout,
+            'stderr': resultado.stderr
+        }
+        
+    except Exception as e:
+        mensagem = f"Erro: {str(e)}"
+        logger.error(f"❌ Job falhou: {mensagem}")
+        atualizar_estatisticas_job('trello_montadores', False, mensagem)
+        raise
+
+
 
 
 def carregar_configuracao_job(nome: str):
@@ -170,7 +218,26 @@ def configurar_jobs():
         
         logger.info(f"✅ Job 'consulta_notas' agendado: intervalo de {intervalo} minutos")
     else:
-        logger.info("⏸️  Job 'consulta_notas' está desativado")
+        logger.info(f"⏸️  Job 'consulta_notas' desativado")
+    
+    # Carregar configuração do job trello_montadores
+    config_montadores = carregar_configuracao_job('trello_montadores')
+    
+    if config_montadores and config_montadores['ativo']:
+        intervalo = config_montadores['intervalo_minutos']
+        
+        scheduler.add_job(
+            executar_job_trello_montadores,
+            trigger=IntervalTrigger(minutes=intervalo),
+            id='trello_montadores',
+            name='Trello Montadores',
+            replace_existing=True,
+            max_instances=1
+        )
+        
+        logger.info(f"✅ Job 'trello_montadores' agendado: intervalo de {intervalo} minutos")
+    else:
+        logger.info(f"⏸️  Job 'trello_montadores' desativado")
 
 
 def iniciar_scheduler():

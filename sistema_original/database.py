@@ -86,7 +86,8 @@ def run_migrations():
         cur.execute("ALTER TABLE envios_montagem ADD COLUMN IF NOT EXISTS valor_total NUMERIC(10, 2);")  # Valor total do envio
         
         # Criar índices
-        cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_montagem ON envios_montagem ((detalhes->>'periodo_relatorio'), montador_id);''')
+        # REMOVIDO: Constraint única por período/montador - agora permitimos múltiplos envios por período
+        # cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_montagem ON envios_montagem ((detalhes->>'periodo_relatorio'), montador_id);''')
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_envios_montagem_upload_hash ON envios_montagem(upload_hash);''')
         cur.execute('''CREATE INDEX IF NOT EXISTS idx_envios_montagem_status_api ON envios_montagem(status_api);''')
         
@@ -908,13 +909,16 @@ def get_envios_montagem_sem_api():
     return envios
 
 def get_envios_montagem_upload_pendente():
-    """Retorna envios de montagem que têm upload_hash e estão aguardando download do arquivo"""
+    """Retorna envios de montagem que têm upload_hash e precisam processar (baixar arquivos OU criar card Trello)"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         cur.execute(
             """SELECT * FROM envios_montagem 
                WHERE upload_hash IS NOT NULL 
-               AND (status_arquivo IS NULL OR status_arquivo != 2)
+               AND (
+                   (status_arquivo IS NULL OR status_arquivo != 2)  -- Arquivos não baixados
+                   OR (status_arquivo = 2 AND (trello_card_criado IS NULL OR trello_card_criado = FALSE))  -- Baixados mas sem card Trello
+               )
                AND validade_link >= CURRENT_DATE
                ORDER BY data_envio DESC"""
         )
@@ -968,32 +972,32 @@ def salvar_nota_fiscal_montagem(envio_id, file_path):
     conn = get_db_connection()
     with conn.cursor() as cur:
         cur.execute(
-            'UPDATE envios_montagem SET nota_fiscal_path = %s, status_api = %s, status = %s WHERE id = %s',
+            'UPDATE envios_montagem SET nota_fiscal_path = %s, status_api = %s, status = %s, data_recebimento_nf = NOW() WHERE id = %s',
             (file_path, 1, 'N.F RECEBIDA', envio_id)
         )
     conn.commit()
     conn.close()
     
-    # 📱 Enviar WhatsApp notificando que a NF foi recebida
-    try:
-        from whatsapp_triggers import WhatsAppAutomation
-        wa = WhatsAppAutomation()
-        
-        # Buscar info do envio para notificar
-        envio = get_envio_montagem_by_id(envio_id)
-        if envio:
-            # Extrair número da NF do nome do arquivo (se possível)
-            import os
-            numero_nf = os.path.basename(file_path).replace('.pdf', '').replace('.PDF', '')
-            
-            wa.enviar_montador_nf_recebida(
-                envio['montador_id'],
-                envio['relatorio_data'].get('periodo_relatorio', ''),
-                envio['relatorio_data'].get('total_geral', 0),
-                numero_nf
-            )
-    except Exception as e:
-        print(f"⚠️ Erro ao enviar WhatsApp de NF recebida: {str(e)}")
+    # 📱 WhatsApp desabilitado para montadores (envio via job já notifica Trello)
+    # try:
+    #     from whatsapp_triggers import WhatsAppAutomation
+    #     wa = WhatsAppAutomation()
+    #     
+    #     # Buscar info do envio para notificar
+    #     envio = get_envio_montagem_by_id(envio_id)
+    #     if envio:
+    #         # Extrair número da NF do nome do arquivo (se possível)
+    #         import os
+    #         numero_nf = os.path.basename(file_path).replace('.pdf', '').replace('.PDF', '')
+    #         
+    #         wa.enviar_montador_nf_recebida(
+    #             envio['montador_id'],
+    #             envio['relatorio_data'].get('periodo_relatorio', ''),
+    #             envio['relatorio_data'].get('total_geral', 0),
+    #             numero_nf
+    #         )
+    # except Exception as e:
+    #     print(f"⚠️ Erro ao enviar WhatsApp de NF recebida: {str(e)}")
 
 def get_envio_montagem_by_id(envio_id):
     """Retorna envio de montagem pelo ID"""

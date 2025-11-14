@@ -349,6 +349,115 @@ function JobConfigControl() {
   );
 }
 
+// Componente para Trello Montadores
+function TrelloMontadoresControl() {
+  const { toast } = useToast();
+  const [executando, setExecutando] = useState(false);
+  const [resultado, setResultado] = useState<any>(null);
+
+  const carregarResultado = async () => {
+    try {
+      const data = await jobsService.getResultadoTrelloMontadores();
+      setResultado(data);
+      setExecutando(data.status === 'running');
+    } catch (error) {
+      console.error('Erro:', error);
+    }
+  };
+
+  useEffect(() => {
+    carregarResultado();
+    const interval = setInterval(() => {
+      if (executando) carregarResultado();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [executando]);
+
+  const handleExecutar = async () => {
+    try {
+      await jobsService.executarTrelloMontadores();
+      toast({ title: 'Sucesso', description: 'Job de Trello iniciado!' });
+      setExecutando(true);
+      setTimeout(carregarResultado, 2000);
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro', 
+        description: error?.response?.data?.detail || 'Erro ao iniciar',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <Button 
+          onClick={handleExecutar} 
+          disabled={executando}
+          className="w-full"
+        >
+          {executando ? (
+            <>
+              <Activity className="mr-2 h-4 w-4 animate-spin" />
+              Processando Montadores...
+            </>
+          ) : (
+            <>
+              <Play className="mr-2 h-4 w-4" />
+              Processar Montadores
+            </>
+          )}
+        </Button>
+      </div>
+
+      {resultado && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            {resultado.status === 'running' && (
+              <Badge variant="default" className="gap-1">
+                <Activity className="h-3 w-3 animate-spin" />
+                Em execução
+              </Badge>
+            )}
+            {resultado.status === 'completed' && resultado.result?.success && (
+              <Badge variant="default" className="gap-1 bg-green-600">
+                <CheckCircle className="h-3 w-3" />
+                Concluído
+              </Badge>
+            )}
+            {resultado.status === 'completed' && !resultado.result?.success && (
+              <Badge variant="destructive" className="gap-1">
+                <XCircle className="h-3 w-3" />
+                Erro
+              </Badge>
+            )}
+          </div>
+
+          {resultado.last_run && (
+            <p className="text-sm text-muted-foreground">
+              Última execução: {new Date(resultado.last_run).toLocaleString('pt-BR')}
+            </p>
+          )}
+
+          {resultado.result?.stdout && (
+            <div className="bg-muted p-3 rounded-md">
+              <p className="text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">
+                {resultado.result.stdout}
+              </p>
+            </div>
+          )}
+
+          {resultado.error && (
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+              <strong>Erro:</strong> {resultado.error}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Jobs() {
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -383,6 +492,23 @@ export default function Jobs() {
         </CardHeader>
         <CardContent>
           <ConsultaNotasControl />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-orange-600" />
+            <div>
+              <CardTitle>Cards Trello - Montadores</CardTitle>
+              <CardDescription>
+                Processa montadores e cria cards no Trello com anexos
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <TrelloMontadoresControl />
         </CardContent>
       </Card>
     </div>

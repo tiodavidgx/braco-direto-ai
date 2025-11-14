@@ -1045,9 +1045,24 @@ Qualquer dúvida, estamos à disposição."""
                             items_para_pdf = []
                             
                             for _, row in group.iterrows():
+                                # Garantir que data_da_montagem é datetime antes de formatar
+                                data_montagem = row['data_da_montagem']
+                                if pd.notna(data_montagem):
+                                    if isinstance(data_montagem, (int, float)):
+                                        # Se ainda for número do Excel, converter
+                                        from datetime import datetime, timedelta
+                                        base_date = datetime(1899, 12, 30)
+                                        data_montagem = (base_date + timedelta(days=float(data_montagem))).strftime('%d/%m/%Y')
+                                    elif hasattr(data_montagem, 'strftime'):
+                                        data_montagem = data_montagem.strftime('%d/%m/%Y')
+                                    else:
+                                        data_montagem = str(data_montagem)
+                                else:
+                                    data_montagem = '-'
+                                
                                 items_para_pdf.append({
                                     'boletim': row['identificador_boletim_montagem'], 
-                                    'data_montagem': row['data_da_montagem'].strftime('%d/%m/%Y'), 
+                                    'data_montagem': data_montagem,
                                     'cliente': row.get('nome_do_cliente', '-'), 
                                     'nome_produto': row.get('nome_produto', '-'), 
                                     'valor_venda': row['media_de_valor_venda'], 
