@@ -203,14 +203,28 @@ async def webhook_nf_recebida(data: dict):
             
             # Atualizar status no banco
             if tipo == "lote":
+                # Buscar tempo de vencimento do prestador
+                from datetime import datetime, timedelta
+                cursor.execute("""
+                    SELECT p.tempo_vencimento_dias 
+                    FROM lotes_servico ls
+                    JOIN prestadores p ON ls.prestador_id = p.id
+                    WHERE ls.id = %s
+                """, (lote_id,))
+                
+                result_tempo = cursor.fetchone()
+                dias_vencimento = result_tempo[0] if result_tempo and result_tempo[0] else 30
+                data_vencimento = datetime.now() + timedelta(days=dias_vencimento)
+                
                 cursor.execute("""
                     UPDATE lotes_servico 
                     SET status_api = 1,
                         data_recebimento_nf = NOW(),
+                        data_vencimento_pagamento = %s,
                         nota_fiscal_path = %s
                     WHERE id = %s
                     RETURNING prestador_nome, periodo, valor_total
-                """, (nota_fiscal, lote_id))
+                """, (data_vencimento, nota_fiscal, lote_id))
                 
                 result = cursor.fetchone()
                 if result:
@@ -233,14 +247,28 @@ async def webhook_nf_recebida(data: dict):
                     )
             
             elif tipo == "montagem":
+                # Buscar tempo de vencimento do montador
+                from datetime import datetime, timedelta
+                cursor.execute("""
+                    SELECT m.tempo_vencimento_dias 
+                    FROM envios_montagem em
+                    JOIN montadores m ON em.montador_id = m.id
+                    WHERE em.id = %s
+                """, (lote_id,))
+                
+                result_tempo = cursor.fetchone()
+                dias_vencimento = result_tempo[0] if result_tempo and result_tempo[0] else 30
+                data_vencimento = datetime.now() + timedelta(days=dias_vencimento)
+                
                 cursor.execute("""
                     UPDATE envios_montagem 
                     SET status_api = 1,
                         data_recebimento_nf = NOW(),
+                        data_vencimento_pagamento = %s,
                         nota_fiscal_path = %s
                     WHERE id = %s
                     RETURNING montador_nome, periodo, valor_total
-                """, (nota_fiscal, lote_id))
+                """, (data_vencimento, nota_fiscal, lote_id))
                 
                 result = cursor.fetchone()
                 if result:

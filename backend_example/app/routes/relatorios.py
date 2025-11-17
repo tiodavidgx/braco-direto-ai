@@ -47,18 +47,25 @@ def check_os_sent(os_numbers):
     if not os_numbers:
         return []
     
-    # Converter todos os números para string
-    os_numbers_str = [str(os) for os in os_numbers]
+    # Converter todos os números para string e normalizar (remover espaços, lowercase)
+    os_numbers_str = [str(os).strip().lower() for os in os_numbers if os]
+    
+    print(f"\n🔍 check_os_sent - Verificando {len(os_numbers_str)} O.S.")
+    print(f"   Primeiras 5 O.S. a verificar: {os_numbers_str[:5]}")
     
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT DISTINCT os_numero 
+                SELECT DISTINCT LOWER(TRIM(os_numero)) as os_numero
                 FROM os_enviadas 
-                WHERE os_numero = ANY(%s)
+                WHERE LOWER(TRIM(os_numero)) = ANY(%s)
             """, (os_numbers_str,))
             
             sent_os = [row['os_numero'] for row in cur.fetchall()]
+    
+    print(f"   ✅ Encontradas {len(sent_os)} O.S. já enviadas")
+    if sent_os:
+        print(f"   Primeiras 5 já enviadas: {sent_os[:5]}")
     
     return sent_os
 
@@ -110,19 +117,24 @@ def check_boletins_sent(boletins):
         return []
     
     # Converter todos os boletins para string
-    boletins_str = [str(b) for b in boletins]
+    boletins_str = [str(b).strip() for b in boletins if b]
+    
+    if not boletins_str:
+        return []
     
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # No sistema original, boletins são armazenados no campo JSONB detalhes
-            # Procurar nos detalhes de envios_montagem
+            # Buscar boletins nos detalhes JSONB de forma eficiente
+            # Usa jsonb_array_elements para extrair items e verificar boletim
             sent_boletins = []
+            
             for boletim in boletins_str:
                 cur.execute("""
                     SELECT COUNT(*) as count
-                    FROM envios_montagem
-                    WHERE detalhes @> %s
-                """, (psycopg2.extras.Json({"items": [{"boletim": boletim}]}),))
+                    FROM envios_montagem,
+                    jsonb_array_elements(detalhes->'items') as item
+                    WHERE item->>'boletim' = %s
+                """, (boletim,))
                 
                 result = cur.fetchone()
                 if result and result['count'] > 0:
@@ -1072,8 +1084,8 @@ def enviar_lote_relatorios(request: dict):
         
         print(f"\n📊 VERIFICAÇÃO:")
         print(f"   Total de O.S.: {len(all_os_numbers)}")
-        print(f"   Já enviadas: {len(sent_os)}")
-        print(f"   Na blacklist: {len(blacklisted_os)}")
+        print(f"   Já enviadas: {len(sent_os)} → {sent_os}")
+        print(f"   Na blacklist: {len(blacklisted_os)} → {blacklisted_os}")
         
         # Adicionar status de cada O.S. para retornar ao frontend
         for os_num in all_os_numbers:
@@ -1092,15 +1104,21 @@ def enviar_lote_relatorios(request: dict):
         # Filtrar dados para enviar apenas os pendentes
         dados_filtrados = []
         for item in dados:
-            os_num = item.get("o_s", "")
+            os_num = str(item.get("o_s", "")).strip().lower()
             if os_num in blacklisted_os:
-                print(f"   ⚠️  O.S. {os_num} - Na blacklist (ignorada)")
+                print(f"   ⚠️  O.S. {item.get('o_s')} - Na blacklist (ignorada)")
                 ignorados += 1
             elif os_num in sent_os:
-                print(f"   ⚠️  O.S. {os_num} - Já enviada (ignorada)")
+                print(f"   ⚠️  O.S. {item.get('o_s')} - Já enviada (ignorada)")
                 ignorados += 1
             else:
+                print(f"   ✅ O.S. {item.get('o_s')} - Pendente (será enviada)")
                 dados_filtrados.append(item)
+        
+        print(f"\n🔍 FILTRO FINAL:")
+        print(f"   Total original: {len(dados)}")
+        print(f"   Total filtrado: {len(dados_filtrados)}")
+        print(f"   Ignorados: {ignorados}")
         
         dados = dados_filtrados
         
@@ -1127,8 +1145,8 @@ def enviar_lote_relatorios(request: dict):
         
         print(f"\n📊 VERIFICAÇÃO:")
         print(f"   Total de boletins: {len(all_boletins)}")
-        print(f"   Já enviados: {len(sent_boletins)}")
-        print(f"   Na blacklist: {len(blacklisted_boletins)}")
+        print(f"   Já enviados: {len(sent_boletins)} → {sent_boletins}")
+        print(f"   Na blacklist: {len(blacklisted_boletins)} → {blacklisted_boletins}")
         
         # Adicionar status de cada boletim para retornar ao frontend
         for boletim in all_boletins:
@@ -1155,7 +1173,13 @@ def enviar_lote_relatorios(request: dict):
                 print(f"   ⚠️  Boletim {boletim} - Já enviado (ignorado)")
                 ignorados += 1
             else:
+                print(f"   ✅ Boletim {boletim} - Pendente (será enviado)")
                 dados_filtrados.append(item)
+        
+        print(f"\n🔍 FILTRO FINAL:")
+        print(f"   Total original: {len(dados)}")
+        print(f"   Total filtrado: {len(dados_filtrados)}")
+        print(f"   Ignorados: {ignorados}")
         
         dados = dados_filtrados
         
