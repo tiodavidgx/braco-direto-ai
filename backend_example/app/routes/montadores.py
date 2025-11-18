@@ -18,7 +18,9 @@ class MontadorBase(BaseModel):
     email: EmailStr
     fornecedor_id: str
     telefone: Optional[str] = None
-    percentual_comissao: float = 0.05
+    percentual_montagem: float = 0.05
+    percentual_assistencia: float = 0.05
+    percentual_desmontagem: float = 0.05
     auxilio_semanal: float = 100.0
     ativo: bool = True
     regra_envio: str = "Nenhuma"
@@ -33,7 +35,9 @@ class MontadorUpdate(BaseModel):
     nome: Optional[str] = None
     email: Optional[EmailStr] = None
     telefone: Optional[str] = None
-    percentual_comissao: Optional[float] = None
+    percentual_montagem: Optional[float] = None
+    percentual_assistencia: Optional[float] = None
+    percentual_desmontagem: Optional[float] = None
     auxilio_semanal: Optional[float] = None
     ativo: Optional[bool] = None
     regra_envio: Optional[str] = None
@@ -91,10 +95,11 @@ def criar_montador(montador: MontadorCreate):
             cur.execute(
                 """
                 INSERT INTO montadores 
-                (nome, identificador, email, telefone, percentual_comissao, 
+                (nome, identificador, email, telefone, percentual_montagem, 
+                 percentual_assistencia, percentual_desmontagem,
                  auxilio_semanal, ativo, fornecedor_id, regra_envio, dias_envio,
                  tempo_vencimento_dias, emails_adicionais)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -102,7 +107,9 @@ def criar_montador(montador: MontadorCreate):
                     montador.identificador,
                     montador.email,
                     montador.telefone,
-                    montador.percentual_comissao,
+                    montador.percentual_montagem,
+                    montador.percentual_assistencia,
+                    montador.percentual_desmontagem,
                     montador.auxilio_semanal,
                     montador.ativo,
                     montador.fornecedor_id,

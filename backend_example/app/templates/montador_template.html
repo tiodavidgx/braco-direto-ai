@@ -25,6 +25,8 @@
     <h1>Relatório de Pagamento de Montagem</h1>
     <div class="subheader">
         <strong>Montador:</strong> {{ nome_montador }} | <strong>Período:</strong> {{ periodo_relatorio }}
+        <br>
+        <strong>Comissões:</strong> Montagem {{ "%.1f"|format(percentual_montagem * 100) }}% | Assistência Técnica {{ "%.1f"|format(percentual_assistencia * 100) }}% | Desmontagem {{ "%.1f"|format(percentual_desmontagem * 100) }}%
     </div>
     <h2>Detalhes das Montagens</h2>
     <table>
@@ -32,11 +34,13 @@
             <tr>
                 <th>Boletim</th>
                 <th>Data da Montagem</th>
+                <th>Tipo de Serviço</th>
                 <th>Cliente</th>
                 <th>Produto</th>
                 <th>Valor Venda (R$)</th>
-                <th>Comissão ({{ "%.2f"|format(percentual_comissao) }}%)</th>
+                <th>Comissão (R$)</th>
                 <th>Adicional (R$)</th>
+                <th>Motivo Adicional</th>
             </tr>
         </thead>
         <tbody>
@@ -44,6 +48,17 @@
             <tr>
                 <td>{{ item.boletim }}</td>
                 <td>{{ item.data_montagem }}</td>
+                <td style="font-size: 9px;">
+                    {% if item.tipo_servico == "MONTAGEM" %}
+                        Montagem
+                    {% elif item.tipo_servico == "ASSISTENCIA_TECNICA" %}
+                        Assist. Técnica
+                    {% elif item.tipo_servico == "DESMONTAGEM" %}
+                        Desmontagem
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td>{{ item.cliente }}</td>
                 <td>{{ item.nome_produto }}</td>
                 <td>{{ "%.2f"|format(item.valor_venda) }}</td>
@@ -56,6 +71,7 @@
                     {% endif %}
                 </td>
                 <td>{{ "%.2f"|format(item.adicional) if item.adicional is not none else '0.00' }}</td>
+                <td style="font-size: 9px; text-align: left;">{{ item.motivo_valor_extra if item.motivo_valor_extra else '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -64,8 +80,16 @@
     <table class="summary-table">
         <tbody>
             <tr>
-                <td>Total Comissões (R$)</td>
-                <td>{{ "%.2f"|format(total_comissao) }}</td>
+                <td>Total Montagem (R$)</td>
+                <td>{{ "%.2f"|format(total_montagem) }}</td>
+            </tr>
+            <tr>
+                <td>Total Assistência Técnica (R$)</td>
+                <td>{{ "%.2f"|format(total_assistencia) }}</td>
+            </tr>
+            <tr>
+                <td>Total Desmontagem (R$)</td>
+                <td>{{ "%.2f"|format(total_desmontagem) }}</td>
             </tr>
             <tr>
                 <td>Total Adicionais (R$)</td>

@@ -39,6 +39,8 @@ interface MontadorEntry {
   nome_produto: string;
   comissao: number;
   adicional?: number;
+  motivo_valor_extra?: string;
+  tipo_servico: "MONTAGEM" | "ASSISTENCIA_TECNICA" | "DESMONTAGEM";
 }
 
 export default function EnvioRelatoriosMontadores() {
@@ -67,6 +69,9 @@ export default function EnvioRelatoriosMontadores() {
     valor_venda: "0",
     cliente: "",
     produto: "",
+    valor_extra: "0",
+    motivo_valor_extra: "",
+    tipo_servico: "MONTAGEM" as "MONTAGEM" | "ASSISTENCIA_TECNICA" | "DESMONTAGEM",
   });
 
   // Configurações de email
@@ -197,6 +202,9 @@ Qualquer dúvida, estamos à disposição.`,
       valor_venda: "150.00",
       cliente: "Cliente Teste",
       produto: "Produto Teste",
+      valor_extra: "0",
+      motivo_valor_extra: "",
+      tipo_servico: "MONTAGEM",
     });
     
     toast.success("Formulário preenchido automaticamente!");
@@ -216,7 +224,27 @@ Qualquer dúvida, estamos à disposição.`,
     }
 
     const valorVenda = parseFloat(formMontador.valor_venda) || 0;
-    const comissao = valorVenda * (montador.percentual_comissao || 0.05);
+    const valorExtra = parseFloat(formMontador.valor_extra) || 0;
+    
+    // Selecionar percentual correto baseado no tipo de serviço
+    let percentual = 0.05; // default
+    if (formMontador.tipo_servico === "MONTAGEM") {
+      percentual = montador.percentual_montagem || 0.05;
+    } else if (formMontador.tipo_servico === "ASSISTENCIA_TECNICA") {
+      percentual = montador.percentual_assistencia || 0.05;
+    } else if (formMontador.tipo_servico === "DESMONTAGEM") {
+      percentual = montador.percentual_desmontagem || 0.05;
+    }
+    
+    const comissao = valorVenda * percentual;
+
+    console.log("🔍 DEBUG - Criando entry:", {
+      tipo_servico: formMontador.tipo_servico,
+      percentual: percentual,
+      adicional: valorExtra,
+      motivo_valor_extra: formMontador.motivo_valor_extra,
+      formMontador: formMontador
+    });
 
     const entry: MontadorEntry = {
       identificador_do_montador: formMontador.identificador,
@@ -227,8 +255,12 @@ Qualquer dúvida, estamos à disposição.`,
       nome_do_cliente: formMontador.cliente || "-",
       nome_produto: formMontador.produto || "-",
       comissao: comissao,
-      adicional: 0,
+      adicional: valorExtra,
+      motivo_valor_extra: formMontador.motivo_valor_extra || undefined,
+      tipo_servico: formMontador.tipo_servico,
     };
+
+    console.log("🔍 DEBUG - Entry criado:", entry);
 
     setManualEntries([...manualEntries, entry]);
     setDataParaEnvio([...manualEntries, entry]);
@@ -242,6 +274,9 @@ Qualquer dúvida, estamos à disposição.`,
       valor_venda: "0",
       cliente: "",
       produto: "",
+      valor_extra: "0",
+      motivo_valor_extra: "",
+      tipo_servico: "MONTAGEM",
     });
 
     toast.success("Boletim adicionado à lista!");
@@ -277,7 +312,8 @@ Qualquer dúvida, estamos à disposição.`,
           'identificador_boletim_montagem',
           'data_da_montagem',
           'media_de_valor_venda',
-          'nome_produto'
+          'nome_produto',
+          'tipo_servico'
         ];
 
         const firstRow = normalizedData[0] || {};
@@ -292,6 +328,30 @@ Qualquer dúvida, estamos à disposição.`,
         const enrichedData = normalizedData.map((row: any) => {
           const montador = montadores.find(m => m.identificador === row.identificador_do_montador);
           const valorVenda = parseFloat(row.media_de_valor_venda) || 0;
+          const valorExtra = parseFloat(row.adicional || row.valor_extra || 0);
+          
+          // Determinar tipo de serviço (obrigatório)
+          let tipoServico: "MONTAGEM" | "ASSISTENCIA_TECNICA" | "DESMONTAGEM" = "MONTAGEM";
+          const tipoRaw = (row.tipo_servico || row.tipo || "").toUpperCase();
+          if (tipoRaw.includes("ASSIST") || tipoRaw.includes("TECNICA")) {
+            tipoServico = "ASSISTENCIA_TECNICA";
+          } else if (tipoRaw.includes("DESMONT")) {
+            tipoServico = "DESMONTAGEM";
+          } else if (tipoRaw.includes("MONTAGEM") || tipoRaw === "MONTAGEM") {
+            tipoServico = "MONTAGEM";
+          }
+          
+          // Calcular comissão baseada no tipo de serviço
+          let percentual = 0.05;
+          if (montador) {
+            if (tipoServico === "MONTAGEM") {
+              percentual = montador.percentual_montagem || 0.05;
+            } else if (tipoServico === "ASSISTENCIA_TECNICA") {
+              percentual = montador.percentual_assistencia || 0.05;
+            } else if (tipoServico === "DESMONTAGEM") {
+              percentual = montador.percentual_desmontagem || 0.05;
+            }
+          }
           
           return {
             ...row,
@@ -301,8 +361,10 @@ Qualquer dúvida, estamos à disposição.`,
             media_de_valor_venda: valorVenda,
             nome_do_cliente: row.nome_do_cliente || "-",
             nome_produto: row.nome_produto || "-",
-            comissao: montador ? valorVenda * (montador.percentual_comissao || 0.05) : 0,
-            adicional: 0,
+            comissao: valorVenda * percentual,
+            adicional: valorExtra,
+            motivo_valor_extra: row.motivo_valor_extra || row.motivo || undefined,
+            tipo_servico: tipoServico,
           };
         });
 
@@ -353,6 +415,9 @@ Qualquer dúvida, estamos à disposição.`,
     setSending(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+
+      console.log("📤 DEBUG - Enviando dados:", dataParaEnvio);
+      console.log("📤 DEBUG - Primeiro item:", dataParaEnvio[0]);
 
       const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
         method: "POST",
@@ -484,6 +549,25 @@ Qualquer dúvida, estamos à disposição.`,
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Tipo de Serviço *</Label>
+                  <Select
+                    value={formMontador.tipo_servico}
+                    onValueChange={(value: "MONTAGEM" | "ASSISTENCIA_TECNICA" | "DESMONTAGEM") =>
+                      setFormMontador({ ...formMontador, tipo_servico: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTAGEM">Montagem</SelectItem>
+                      <SelectItem value="ASSISTENCIA_TECNICA">Assistência Técnica</SelectItem>
+                      <SelectItem value="DESMONTAGEM">Desmontagem</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Data da Montagem</Label>
                   <Input
                     type="date"
@@ -506,11 +590,36 @@ Qualquer dúvida, estamos à disposição.`,
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Valor Extra (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formMontador.valor_extra}
+                    onChange={(e) => setFormMontador({ ...formMontador, valor_extra: e.target.value })}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valor fixo (não afetado pela comissão)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Cliente</Label>
                   <Input
                     value={formMontador.cliente}
                     onChange={(e) => setFormMontador({ ...formMontador, cliente: e.target.value })}
                     placeholder="Nome do cliente"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Motivo Valor Extra</Label>
+                  <Input
+                    value={formMontador.motivo_valor_extra}
+                    onChange={(e) => setFormMontador({ ...formMontador, motivo_valor_extra: e.target.value })}
+                    placeholder="Ex: Deslocamento, hora extra, etc"
                   />
                 </div>
 
@@ -545,6 +654,8 @@ Qualquer dúvida, estamos à disposição.`,
                       <TableHead>Boletim</TableHead>
                       <TableHead>Valor Venda</TableHead>
                       <TableHead>Comissão</TableHead>
+                      <TableHead>Valor Extra</TableHead>
+                      <TableHead>Motivo Extra</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -555,6 +666,8 @@ Qualquer dúvida, estamos à disposição.`,
                         <TableCell>{entry.identificador_boletim_montagem}</TableCell>
                         <TableCell>R$ {entry.media_de_valor_venda.toFixed(2)}</TableCell>
                         <TableCell>R$ {entry.comissao.toFixed(2)}</TableCell>
+                        <TableCell>R$ {(entry.adicional || 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{entry.motivo_valor_extra || "-"}</TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
@@ -595,8 +708,15 @@ Qualquer dúvida, estamos à disposição.`,
                   onChange={handleExcelUpload}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Colunas obrigatórias: identificador_do_montador, identificador_boletim_montagem,
-                  data_da_montagem, media_de_valor_venda, nome_produto
+                  <strong>Colunas obrigatórias:</strong> identificador_do_montador, identificador_boletim_montagem,
+                  data_da_montagem, media_de_valor_venda, nome_produto, tipo_servico
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  <strong>Colunas opcionais:</strong> adicional (ou valor_extra) - valor fixo não afetado pela comissão; 
+                  motivo_valor_extra (ou motivo) - justificativa do valor extra
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  <strong>Valores para tipo_servico:</strong> MONTAGEM, ASSISTENCIA_TECNICA (ou ASSIST), DESMONTAGEM (ou DESMONT)
                 </p>
               </div>
 

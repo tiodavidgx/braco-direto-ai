@@ -40,7 +40,9 @@ export default function Montadores() {
   const [formEmail, setFormEmail] = useState("");
   const [formEmailsAdicionais, setFormEmailsAdicionais] = useState("");
   const [formFornecedorId, setFormFornecedorId] = useState("");
-  const [formPercentualComissao, setFormPercentualComissao] = useState("5.0");
+  const [formPercentualMontagem, setFormPercentualMontagem] = useState("5.0");
+  const [formPercentualAssistencia, setFormPercentualAssistencia] = useState("5.0");
+  const [formPercentualDesmontagem, setFormPercentualDesmontagem] = useState("5.0");
   const [formAuxilioSemanal, setFormAuxilioSemanal] = useState("100.00");
   const [formRegraEnvio, setFormRegraEnvio] = useState("Nenhuma");
   const [formDiasEnvio, setFormDiasEnvio] = useState("");
@@ -139,7 +141,9 @@ export default function Montadores() {
         identificador: formIdentificador,
         email: formEmail,
         fornecedor_id: formFornecedorId,
-        percentual_comissao: parseFloat(formPercentualComissao) / 100,
+        percentual_montagem: parseFloat(formPercentualMontagem) / 100,
+        percentual_assistencia: parseFloat(formPercentualAssistencia) / 100,
+        percentual_desmontagem: parseFloat(formPercentualDesmontagem) / 100,
         auxilio_semanal: parseFloat(formAuxilioSemanal),
         regra_envio: formRegraEnvio,
         dias_envio: formDiasEnvio,
@@ -155,7 +159,9 @@ export default function Montadores() {
       setFormEmail("");
       setFormEmailsAdicionais("");
       setFormFornecedorId("");
-      setFormPercentualComissao("5.0");
+      setFormPercentualMontagem("5.0");
+      setFormPercentualAssistencia("5.0");
+      setFormPercentualDesmontagem("5.0");
       setFormAuxilioSemanal("100.00");
       setFormRegraEnvio("Nenhuma");
       setFormDiasEnvio("");
@@ -175,7 +181,9 @@ export default function Montadores() {
     setFormEmail(montador.email);
     setFormEmailsAdicionais(montador.emails_adicionais || "");
     setFormFornecedorId(montador.fornecedor_id);
-    setFormPercentualComissao(((montador.percentual_comissao || 0.05) * 100).toString());
+    setFormPercentualMontagem(((montador.percentual_montagem || 0.05) * 100).toString());
+    setFormPercentualAssistencia(((montador.percentual_assistencia || 0.05) * 100).toString());
+    setFormPercentualDesmontagem(((montador.percentual_desmontagem || 0.05) * 100).toString());
     setFormAuxilioSemanal((montador.auxilio_semanal || 100).toString());
     setFormRegraEnvio(montador.regra_envio || "Nenhuma");
     setFormDiasEnvio(montador.dias_envio || "");
@@ -189,7 +197,9 @@ export default function Montadores() {
     setFormEmail("");
     setFormEmailsAdicionais("");
     setFormFornecedorId("");
-    setFormPercentualComissao("5.0");
+    setFormPercentualMontagem("5.0");
+    setFormPercentualAssistencia("5.0");
+    setFormPercentualDesmontagem("5.0");
     setFormAuxilioSemanal("100.00");
     setFormRegraEnvio("Nenhuma");
     setFormDiasEnvio("");
@@ -209,7 +219,9 @@ export default function Montadores() {
         email: formEmail,
         fornecedor_id: formFornecedorId,
         emails_adicionais: formEmailsAdicionais || null,
-        percentual_comissao: parseFloat(formPercentualComissao) / 100,
+        percentual_montagem: parseFloat(formPercentualMontagem) / 100,
+        percentual_assistencia: parseFloat(formPercentualAssistencia) / 100,
+        percentual_desmontagem: parseFloat(formPercentualDesmontagem) / 100,
         auxilio_semanal: parseFloat(formAuxilioSemanal),
         regra_envio: formRegraEnvio,
         dias_envio: formDiasEnvio,
@@ -309,23 +321,50 @@ export default function Montadores() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="comissao">Comissão (%)</Label>
+                  <Label htmlFor="comissao-montagem">% Montagem</Label>
                   <Input
-                    id="comissao"
+                    id="comissao-montagem"
                     type="number"
                     step="0.1"
                     min="0"
                     max="100"
-                    value={formPercentualComissao}
-                    onChange={(e) => setFormPercentualComissao(e.target.value)}
+                    value={formPercentualMontagem}
+                    onChange={(e) => setFormPercentualMontagem(e.target.value)}
                   />
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="auxilio">Auxílio Semanal (R$)</Label>
+                  <Label htmlFor="comissao-assistencia">% Assistência</Label>
                   <Input
+                    id="comissao-assistencia"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={formPercentualAssistencia}
+                    onChange={(e) => setFormPercentualAssistencia(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="comissao-desmontagem">% Desmontagem</Label>
+                  <Input
+                    id="comissao-desmontagem"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={formPercentualDesmontagem}
+                    onChange={(e) => setFormPercentualDesmontagem(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="auxilio">Auxílio Semanal (R$)</Label>
+                <Input
                     id="auxilio"
                     type="number"
                     step="10"
@@ -333,7 +372,6 @@ export default function Montadores() {
                     value={formAuxilioSemanal}
                     onChange={(e) => setFormAuxilioSemanal(e.target.value)}
                   />
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -445,8 +483,10 @@ export default function Montadores() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Identificador</TableHead>
                 <TableHead>Contato</TableHead>
-                <TableHead>Comissão</TableHead>
-                <TableHead>Auxílio Semanal</TableHead>
+                <TableHead>% Mont</TableHead>
+                <TableHead>% Assist</TableHead>
+                <TableHead>% Desm</TableHead>
+                <TableHead>Auxílio</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -470,11 +510,14 @@ export default function Montadores() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Percent className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium">{(montador.percentual_comissao * 100).toFixed(1)}%</span>
-                    </div>
+                  <TableCell className="text-center">
+                    <span className="font-medium">{((montador.percentual_montagem || 0) * 100).toFixed(1)}%</span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="font-medium">{((montador.percentual_assistencia || 0) * 100).toFixed(1)}%</span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="font-medium">{((montador.percentual_desmontagem || 0) * 100).toFixed(1)}%</span>
                   </TableCell>
                   <TableCell>
                     <span className="font-medium">
@@ -573,30 +616,54 @@ export default function Montadores() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-comissao">% Comissão</Label>
+                    <Label htmlFor="edit-montagem">% Montagem</Label>
                     <Input
-                      id="edit-comissao"
+                      id="edit-montagem"
                       type="number"
                       step="0.1"
-                      value={formPercentualComissao}
-                      onChange={(e) => setFormPercentualComissao(e.target.value)}
+                      value={formPercentualMontagem}
+                      onChange={(e) => setFormPercentualMontagem(e.target.value)}
                       placeholder="5"
                     />
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-auxilio">Auxílio Semanal (R$)</Label>
+                    <Label htmlFor="edit-assistencia">% Assistência</Label>
                     <Input
-                      id="edit-auxilio"
+                      id="edit-assistencia"
                       type="number"
-                      step="0.01"
-                      value={formAuxilioSemanal}
-                      onChange={(e) => setFormAuxilioSemanal(e.target.value)}
-                      placeholder="100"
+                      step="0.1"
+                      value={formPercentualAssistencia}
+                      onChange={(e) => setFormPercentualAssistencia(e.target.value)}
+                      placeholder="5"
                     />
                   </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-desmontagem">% Desmontagem</Label>
+                    <Input
+                      id="edit-desmontagem"
+                      type="number"
+                      step="0.1"
+                      value={formPercentualDesmontagem}
+                      onChange={(e) => setFormPercentualDesmontagem(e.target.value)}
+                      placeholder="5"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-auxilio">Auxílio Semanal (R$)</Label>
+                  <Input
+                    id="edit-auxilio"
+                    type="number"
+                    step="0.01"
+                    value={formAuxilioSemanal}
+                    onChange={(e) => setFormAuxilioSemanal(e.target.value)}
+                    placeholder="100"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

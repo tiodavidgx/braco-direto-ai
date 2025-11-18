@@ -67,6 +67,8 @@ interface OSItem {
   valor_venda?: number;
   comissao_calculada?: number;
   comissao_editada?: number;
+  adicional?: number;
+  motivo_valor_extra?: string;
   servico?: string;
   valor_total?: number;
   endereco?: string;
@@ -771,6 +773,8 @@ export default function HistoricoEnvios() {
                                                     <TableHead className="font-semibold min-w-[180px]">Produto</TableHead>
                                                     <TableHead className="font-semibold text-right min-w-[120px]">Valor Venda</TableHead>
                                                     <TableHead className="font-semibold text-right min-w-[120px]">Comissão</TableHead>
+                                                    <TableHead className="font-semibold text-right min-w-[110px]">Valor Extra</TableHead>
+                                                    <TableHead className="font-semibold min-w-[150px]">Motivo Extra</TableHead>
                                                   </>
                                                 )}
                                               </TableRow>
@@ -849,6 +853,18 @@ export default function HistoricoEnvios() {
                                                               minimumFractionDigits: 2 
                                                             }).format(comissao) 
                                                             : 'R$ 0,00'}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-semibold tabular-nums">
+                                                          {(os.adicional || 0) > 0 ? 
+                                                            new Intl.NumberFormat('pt-BR', { 
+                                                              style: 'currency', 
+                                                              currency: 'BRL',
+                                                              minimumFractionDigits: 2 
+                                                            }).format(os.adicional || 0) 
+                                                            : 'R$ 0,00'}
+                                                        </TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">
+                                                          {os.motivo_valor_extra || '-'}
                                                         </TableCell>
                                                       </>
                                                     )}

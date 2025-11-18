@@ -10,7 +10,9 @@ export interface Montador {
   identificador: string;
   email: string;
   telefone?: string;
-  percentual_comissao: number;
+  percentual_montagem: number;
+  percentual_assistencia: number;
+  percentual_desmontagem: number;
   auxilio_semanal: number;
   ativo: boolean;
   fornecedor_id?: string;
@@ -27,7 +29,9 @@ export interface MontadorCreate {
   identificador: string;
   email: string;
   telefone?: string;
-  percentual_comissao: number;
+  percentual_montagem: number;
+  percentual_assistencia: number;
+  percentual_desmontagem: number;
   auxilio_semanal: number;
   ativo?: boolean;
   fornecedor_id?: string;

@@ -586,7 +586,8 @@ def gerar_pdf_montador(envio_data):
             'valor_venda': float(item.get('valor_venda', item.get('media_de_valor_venda', 0))),
             'comissao_calculada': float(item.get('comissao_calculada', item.get('comissao', 0))),
             'comissao_editada': item.get('comissao_editada'),
-            'adicional': float(item.get('adicional', 0))
+            'adicional': float(item.get('adicional', 0)),
+            'motivo_valor_extra': item.get('motivo_valor_extra', item.get('motivo', ''))
         })
     
     # Contexto EXATAMENTE como no original
@@ -840,9 +841,11 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 """, (pdf_path, request.id))
                 
             else:  # montador
-                # Buscar envio de montador
+                # Buscar envio de montador com os 3 percentuais
                 cur.execute("""
-                    SELECT e.*, m.email, m.nome as montador_nome, m.percentual_comissao
+                    SELECT e.*, m.email, m.nome as montador_nome, 
+                           m.percentual_montagem, m.percentual_assistencia, m.percentual_desmontagem,
+                           m.auxilio_semanal
                     FROM envios_montagem e
                     JOIN montadores m ON e.montador_id = m.id
                     WHERE e.id = %s
@@ -869,8 +872,15 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 
                 # Preparar dados para o template
                 items_fmt = []
-                total_comissao = 0
+                total_montagem = 0
+                total_assistencia = 0
+                total_desmontagem = 0
                 total_adicionais = 0
+                
+                # Converter percentuais para float
+                percentual_montagem = float(envio.get('percentual_montagem', 0.05))
+                percentual_assistencia = float(envio.get('percentual_assistencia', 0.05))
+                percentual_desmontagem = float(envio.get('percentual_desmontagem', 0.05))
                 
                 for montagem in montagens:
                     data_montagem = montagem.get('data_montagem', '')
@@ -878,34 +888,52 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                         data_montagem = data_montagem.strftime('%d/%m/%Y')
                     
                     valor_venda = float(montagem.get('valor_venda', 0))
-                    percentual_comissao = float(envio.get('percentual_comissao', 0))
-                    comissao_calculada = valor_venda * (percentual_comissao / 100)
-                    comissao_editada = montagem.get('comissao_editada')
+                    tipo_servico = montagem.get('tipo_servico', 'MONTAGEM')
                     adicional = float(montagem.get('valor_adicional', 0))
+                    motivo_extra = montagem.get('motivo_valor_extra', montagem.get('motivo', ''))
+                    
+                    # Calcular comissão com base no tipo de serviço
+                    if tipo_servico == "ASSISTENCIA_TECNICA":
+                        comissao_calculada = valor_venda * percentual_assistencia
+                        total_assistencia += comissao_calculada
+                    elif tipo_servico == "DESMONTAGEM":
+                        comissao_calculada = valor_venda * percentual_desmontagem
+                        total_desmontagem += comissao_calculada
+                    else:  # MONTAGEM
+                        comissao_calculada = valor_venda * percentual_montagem
+                        total_montagem += comissao_calculada
+                    
+                    comissao_editada = montagem.get('comissao_editada')
                     
                     items_fmt.append({
                         "boletim": montagem.get('boletim_montagem', ''),
                         "data_montagem": str(data_montagem),
+                        "tipo_servico": tipo_servico,
                         "cliente": montagem.get('cliente', ''),
                         "nome_produto": montagem.get('produto', ''),
                         "valor_venda": valor_venda,
                         "comissao_calculada": comissao_calculada,
                         "comissao_editada": comissao_editada,
-                        "adicional": adicional
+                        "adicional": adicional,
+                        "motivo_valor_extra": motivo_extra
                     })
                     
-                    comissao_final = comissao_editada if comissao_editada is not None else comissao_calculada
-                    total_comissao += comissao_final
                     total_adicionais += adicional
                 
                 total_auxilio = float(envio.get('auxilio_semanal', 0))
+                total_comissao = total_montagem + total_assistencia + total_desmontagem
                 total_geral = total_comissao + total_adicionais + total_auxilio
                 
                 context = {
                     "nome_montador": envio['montador_nome'],
                     "periodo_relatorio": envio['periodo'],
                     "items": items_fmt,
-                    "percentual_comissao": envio.get('percentual_comissao', 0),
+                    "percentual_montagem": percentual_montagem,
+                    "percentual_assistencia": percentual_assistencia,
+                    "percentual_desmontagem": percentual_desmontagem,
+                    "total_montagem": total_montagem,
+                    "total_assistencia": total_assistencia,
+                    "total_desmontagem": total_desmontagem,
                     "total_comissao": total_comissao,
                     "total_adicionais": total_adicionais,
                     "total_auxilio": total_auxilio,
@@ -1215,6 +1243,12 @@ def enviar_lote_relatorios(request: dict):
     # Enviar email para cada grupo
     for nome_destinatario, itens in grupos.items():
         try:
+            # DEBUG: Verificar se motivo_valor_extra está nos itens
+            if tipo == "montador":
+                print(f"\n🔍 DEBUG - Itens recebidos para {nome_destinatario}:")
+                for idx, item in enumerate(itens):
+                    print(f"   Item {idx+1}: adicional={item.get('adicional', 0)}, motivo={item.get('motivo_valor_extra', 'N/A')}")
+            
             # Buscar email do destinatário no banco
             with get_db_connection() as conn:
                 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1312,10 +1346,16 @@ def enviar_lote_relatorios(request: dict):
                         periodo = hoje.strftime('%m/%Y')  # API externa exige MM/YYYY
                     
                     # Buscar informações do montador para calcular comissões
-                    cur.execute("SELECT percentual_comissao, auxilio_semanal FROM montadores WHERE id = %s", (destinatario_id,))
+                    cur.execute("""
+                        SELECT percentual_montagem, percentual_assistencia, percentual_desmontagem, auxilio_semanal 
+                        FROM montadores 
+                        WHERE id = %s
+                    """, (destinatario_id,))
                     montador_info = cur.fetchone()
-                    percentual_comissao = montador_info['percentual_comissao'] if montador_info else 0.05
-                    auxilio_semanal = montador_info['auxilio_semanal'] if montador_info else 100.0
+                    percentual_montagem = float(montador_info['percentual_montagem']) if montador_info else 0.05
+                    percentual_assistencia = float(montador_info['percentual_assistencia']) if montador_info else 0.05
+                    percentual_desmontagem = float(montador_info['percentual_desmontagem']) if montador_info else 0.05
+                    auxilio_semanal = float(montador_info['auxilio_semanal']) if montador_info else 100.0
                     
                     # Calcular semanas trabalhadas (número de semanas únicas)
                     semanas_unicas = set()
@@ -1366,27 +1406,67 @@ def enviar_lote_relatorios(request: dict):
                         return str(data_raw)
                     
                     # Criar envio de montagem (salva detalhes em JSONB, não tabela separada)
+                    # Processar items e calcular totais por tipo de serviço
+                    items_processados = []
+                    total_montagem = 0
+                    total_assistencia = 0
+                    total_desmontagem = 0
+                    
+                    for item in itens:
+                        tipo_servico = item.get('tipo_servico', 'MONTAGEM').upper()
+                        valor_venda = float(item.get('media_de_valor_venda', 0))
+                        
+                        # Determinar percentual baseado no tipo (converter Decimal para float)
+                        if 'ASSIST' in tipo_servico or 'TECNICA' in tipo_servico:
+                            percentual = float(percentual_assistencia)
+                            tipo_servico = 'ASSISTENCIA_TECNICA'
+                        elif 'DESMONT' in tipo_servico:
+                            percentual = float(percentual_desmontagem)
+                            tipo_servico = 'DESMONTAGEM'
+                        else:
+                            percentual = float(percentual_montagem)
+                            tipo_servico = 'MONTAGEM'
+                        
+                        comissao = valor_venda * percentual
+                        
+                        # Somar ao total correto
+                        if tipo_servico == 'MONTAGEM':
+                            total_montagem += comissao
+                        elif tipo_servico == 'ASSISTENCIA_TECNICA':
+                            total_assistencia += comissao
+                        elif tipo_servico == 'DESMONTAGEM':
+                            total_desmontagem += comissao
+                        
+                        items_processados.append({
+                            "boletim": item.get('identificador_boletim_montagem', ''),
+                            "data_montagem": format_data_para_pdf(item.get('data_da_montagem', '')),
+                            "cliente": item.get('nome_do_cliente', '-'),
+                            "nome_produto": item.get('nome_produto', '-'),
+                            "valor_venda": valor_venda,
+                            "comissao_calculada": comissao,
+                            "comissao_editada": None,
+                            "adicional": float(item.get('adicional', 0)),
+                            "motivo_valor_extra": item.get('motivo_valor_extra', item.get('motivo', '')),
+                            "tipo_servico": tipo_servico
+                        })
+                    
+                    total_adicionais = sum(float(item.get('adicional', 0)) for item in itens)
+                    total_comissoes = total_montagem + total_assistencia + total_desmontagem
+                    
                     detalhes_json = {
                         "nome_montador": nome_destinatario,
                         "periodo_relatorio": periodo_relatorio,
-                        "percentual_comissao": percentual_comissao * 100,
-                        "items": [
-                            {
-                                "boletim": item.get('identificador_boletim_montagem', ''),
-                                "data_montagem": format_data_para_pdf(item.get('data_da_montagem', '')),
-                                "cliente": item.get('nome_do_cliente', '-'),
-                                "nome_produto": item.get('nome_produto', '-'),
-                                "valor_venda": float(item.get('media_de_valor_venda', 0)),
-                                "comissao_calculada": float(item.get('media_de_valor_venda', 0)) * percentual_comissao,
-                                "comissao_editada": None,
-                                "adicional": float(item.get('adicional', 0))
-                            }
-                            for item in itens
-                        ],
-                        "total_comissao": sum(float(item.get('media_de_valor_venda', 0)) * percentual_comissao for item in itens),
-                        "total_adicionais": sum(float(item.get('adicional', 0)) for item in itens),
+                        "percentual_montagem": percentual_montagem,  # Já como decimal (ex: 0.05)
+                        "percentual_assistencia": percentual_assistencia,  # Já como decimal
+                        "percentual_desmontagem": percentual_desmontagem,  # Já como decimal
+                        "items": items_processados,
+                        "total_montagem": total_montagem,
+                        "total_assistencia": total_assistencia,
+                        "total_desmontagem": total_desmontagem,
+                        "total_comissao": total_comissoes,
+                        "total_adicionais": total_adicionais,
                         "total_auxilio": total_auxilio,
-                        "total_geral": sum(float(item.get('media_de_valor_venda', 0)) * percentual_comissao for item in itens) + sum(float(item.get('adicional', 0)) for item in itens) + total_auxilio
+                        "total_geral": total_comissoes + total_adicionais + total_auxilio
                     }
                     
                     # SEMPRE criar novo registro (não reutilizar por período)
@@ -2027,6 +2107,7 @@ def get_os_by_lote(lote_id: int, tipo: str = Query(..., description="Tipo: 'pres
                         'comissao_calculada': item.get('comissao_calculada', item.get('comissao', 0)),
                         'comissao_editada': item.get('comissao_editada'),
                         'adicional': item.get('adicional', 0),
+                        'motivo_valor_extra': item.get('motivo_valor_extra', item.get('motivo', '')),
                         'montador_nome': result['montador_nome']
                     }
                     for idx, item in enumerate(items_list)
