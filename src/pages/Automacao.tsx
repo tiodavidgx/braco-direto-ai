@@ -17,6 +17,7 @@ export default function Automacao() {
   const { toast } = useToast();
   const [templates, setTemplates] = useState<any[]>([]);
   const [triggers, setTriggers] = useState<any[]>([]);
+  const [historico, setHistorico] = useState<any[]>([]);
   const [modoEdicao, setModoEdicao] = useState<"lista" | "novo" | "editar">("lista");
   const [templateEditando, setTemplateEditando] = useState<any>(null);
   const [nomeTemplate, setNomeTemplate] = useState("");
@@ -27,6 +28,7 @@ export default function Automacao() {
   useEffect(() => {
     carregarTemplates();
     carregarTriggers();
+    carregarHistorico();
   }, []);
 
   const carregarTemplates = async () => {
@@ -44,6 +46,15 @@ export default function Automacao() {
       setTriggers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Erro ao carregar triggers:", error);
+    }
+  };
+
+  const carregarHistorico = async () => {
+    try {
+      const data = await automacaoService.getHistorico();
+      setHistorico(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erro ao carregar histórico:", error);
     }
   };
 
@@ -97,6 +108,51 @@ export default function Automacao() {
     setTemplateEditando(null);
     setNomeTemplate("");
     setTextoTemplate("");
+  };
+
+  const toggleTrigger = async (triggerId: number, novoStatus: boolean) => {
+    try {
+      await automacaoService.updateTrigger(String(triggerId), { ativo: novoStatus });
+      toast({ 
+        title: "Sucesso", 
+        description: `Gatilho ${novoStatus ? 'ativado' : 'desativado'}!` 
+      });
+      carregarTriggers();
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar gatilho",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const salvarTrigger = async (evento: string, templateId: string) => {
+    try {
+      // Buscar se já existe trigger para este evento
+      const triggerExistente = triggers.find(t => t.evento === evento);
+      
+      if (triggerExistente) {
+        await automacaoService.updateTrigger(triggerExistente.id, {
+          template_id: templateId,
+        });
+        toast({ title: "Sucesso", description: "Gatilho atualizado!" });
+      } else {
+        await automacaoService.saveTrigger({
+          evento,
+          template_id: templateId,
+          ativo: true,
+        });
+        toast({ title: "Sucesso", description: "Gatilho criado!" });
+      }
+      carregarTriggers();
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar gatilho",
+        variant: "destructive",
+      });
+    }
   };
 
   const abrirEdicao = (template: any) => {
@@ -320,42 +376,67 @@ export default function Automacao() {
               <CardDescription>Configure quando as mensagens devem ser enviadas</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                { id: "envio_email_prestador", nome: "Email Enviado - Prestador", descricao: "Quando um email é enviado ao prestador" },
-                { id: "nf_recebida_prestador", nome: "NF Anexada - Prestador", descricao: "Quando o prestador anexa a nota fiscal" },
-                { id: "pagamento_proximo_prestador", nome: "Pagamento Próximo - Prestador", descricao: "X dias antes do vencimento" },
-                { id: "envio_email_montador", nome: "Email Enviado - Montador", descricao: "Quando um email é enviado ao montador" },
-                { id: "nf_recebida_montador", nome: "NF Anexada - Montador", descricao: "Quando o montador anexa a nota fiscal" },
-              ].map((evento) => (
-                <Card key={evento.id}>
+              {triggers.map((trigger) => (
+                <Card key={trigger.id}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="text-base">{evento.nome}</CardTitle>
-                        <CardDescription className="text-sm">{evento.descricao}</CardDescription>
+                        <CardTitle className="text-base">
+                          {trigger.evento === 'envio_email_prestador' && '📧 Email Enviado - Prestador'}
+                          {trigger.evento === 'nf_recebida_prestador' && '📎 NF Recebida - Prestador'}
+                          {trigger.evento === 'envio_email_montador' && '📧 Email Enviado - Montador'}
+                          {trigger.evento === 'nf_recebida_montador' && '📎 NF Recebida - Montador'}
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          {trigger.evento === 'envio_email_prestador' && 'Quando um email é enviado ao prestador'}
+                          {trigger.evento === 'nf_recebida_prestador' && 'Quando o prestador anexa a nota fiscal'}
+                          {trigger.evento === 'envio_email_montador' && 'Quando um email é enviado ao montador'}
+                          {trigger.evento === 'nf_recebida_montador' && 'Quando o montador anexa a nota fiscal'}
+                        </CardDescription>
                       </div>
-                      <Switch />
+                      <Switch 
+                        checked={trigger.ativo}
+                        onCheckedChange={(checked) => toggleTrigger(trigger.id, checked)}
+                      />
                     </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       <Label>Template</Label>
-                      <Select>
+                      <Select
+                        value={trigger.template_id}
+                        onValueChange={(value) => salvarTrigger(trigger.evento, value)}
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione um template" />
+                          <SelectValue placeholder="Selecione um template">
+                            {trigger.template_nome || "Selecione um template"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {templates.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.nome}
-                            </SelectItem>
-                          ))}
+                          {templates
+                            .filter(t => t.ativo)
+                            .map((t) => (
+                              <SelectItem key={t.id} value={String(t.id)}>
+                                {t.nome}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
+                      {trigger.template_nome && (
+                        <Badge variant="outline" className="mt-2">
+                          Usando: {trigger.template_nome}
+                        </Badge>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               ))}
+              
+              {triggers.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhum gatilho configurado ainda
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -364,13 +445,58 @@ export default function Automacao() {
         <TabsContent value="historico" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Histórico de Envios</CardTitle>
-              <CardDescription>Mensagens enviadas automaticamente</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Histórico de Envios</CardTitle>
+                  <CardDescription>Mensagens enviadas automaticamente</CardDescription>
+                </div>
+                <Button variant="outline" onClick={carregarHistorico}>
+                  Atualizar
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <p className="text-center text-muted-foreground py-8">
-                Nenhum envio automático registrado ainda
-              </p>
+              {historico.length > 0 ? (
+                <div className="space-y-3">
+                  {historico.map((h) => (
+                    <Card key={h.id}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-sm">
+                              {h.prestador_nome || h.montador_nome}
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                              {new Date(h.data_envio).toLocaleString('pt-BR')}
+                            </CardDescription>
+                          </div>
+                          <Badge 
+                            variant={h.status === 'enviado' ? 'default' : h.status === 'pendente' ? 'secondary' : 'destructive'}
+                          >
+                            {h.status === 'enviado' && '✅ Enviado'}
+                            {h.status === 'pendente' && '⏳ Pendente'}
+                            {h.status === 'erro' && '❌ Erro'}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <code className="text-xs bg-muted p-2 rounded block overflow-x-auto whitespace-pre-wrap">
+                          {h.mensagem}
+                        </code>
+                        {h.erro && (
+                          <p className="text-xs text-destructive mt-2">
+                            Erro: {h.erro}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhum envio automático registrado ainda
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

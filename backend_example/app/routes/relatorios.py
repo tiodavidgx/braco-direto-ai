@@ -20,6 +20,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from app.utils.whatsapp_automation import enviar_notificacao_whatsapp
 
 router = APIRouter()
 
@@ -1071,6 +1072,8 @@ def enviar_lote_relatorios(request: dict):
     email_config = request.get("emailConfig", {})
     enviar_whatsapp = request.get("enviarWhatsApp", False)
     
+    print(f"🔍 DEBUG - enviarWhatsApp recebido: {enviar_whatsapp} (tipo: {type(enviar_whatsapp)})")
+    
     if not dados:
         raise HTTPException(status_code=400, detail="Nenhum dado para enviar")
     
@@ -1892,6 +1895,49 @@ def enviar_lote_relatorios(request: dict):
             sucesso += len(itens)
             print(f"   ✅ Email enviado com sucesso com PDF anexado!")
             print(f"   ✅ Lote #{lote_id} registrado com {len(itens)} itens")
+            
+            # Enviar notificação WhatsApp se habilitado
+            try:
+                if enviar_whatsapp:
+                    print(f"   📱 Enviando notificação WhatsApp...")
+                    evento = 'envio_email_prestador' if tipo == 'prestador' else 'envio_email_montador'
+                    
+                    # Preparar variáveis para o template
+                    if tipo == 'prestador':
+                        valor_para_whatsapp = str(total_geral)
+                        periodo_para_whatsapp = periodo
+                    else:
+                        valor_para_whatsapp = str(detalhes_json.get('total_geral', 0))
+                        periodo_para_whatsapp = detalhes_json.get('periodo_relatorio', '')
+                    
+                    variaveis = {
+                        'periodo': periodo_para_whatsapp,
+                        'valor': valor_para_whatsapp,
+                        'link': link_upload if link_upload else "",
+                    }
+                    
+                    if tipo == 'prestador':
+                        variaveis['nome_prestador'] = nome_destinatario
+                    else:
+                        variaveis['nome_montador'] = nome_destinatario
+                    
+                    resultado_whatsapp = enviar_notificacao_whatsapp(
+                        evento=evento,
+                        destinatario_id=destinatario_id,
+                        tipo=tipo,
+                        variaveis=variaveis
+                    )
+                    
+                    if resultado_whatsapp.get('success'):
+                        if resultado_whatsapp.get('queued'):
+                            print(f"   ✅ WhatsApp enfileirado (servidor offline)")
+                        else:
+                            print(f"   ✅ WhatsApp enviado com sucesso!")
+                    else:
+                        print(f"   ⚠️ WhatsApp não enviado: {resultado_whatsapp.get('message')}")
+            except Exception as e:
+                print(f"   ⚠️ Erro ao enviar WhatsApp: {str(e)}")
+                # Não falha o envio do email se WhatsApp der erro
                 
         except Exception as e:
             import traceback

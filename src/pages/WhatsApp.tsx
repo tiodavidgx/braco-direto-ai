@@ -45,10 +45,69 @@ export default function WhatsApp() {
     }
   };
 
+  const iniciarServidor = async () => {
+    setLoading(true);
+    try {
+      const response = await whatsappService.startServer();
+      toast({
+        title: "Sucesso",
+        description: response.message || "Servidor WhatsApp iniciado",
+      });
+      setTimeout(() => atualizarStatus(), 2000);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao iniciar servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pararServidor = async () => {
+    setLoading(true);
+    try {
+      const response = await whatsappService.stopServer();
+      toast({
+        title: "Sucesso",
+        description: response.message || "Servidor WhatsApp parado",
+      });
+      setTimeout(() => atualizarStatus(), 1000);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao parar servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processarFila = async () => {
+    setLoading(true);
+    try {
+      const response: any = await whatsappService.processarFila();
+      toast({
+        title: "Fila Processada",
+        description: `${response.enviados || 0} mensagens enviadas de ${response.processados || 0} pendentes`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao processar fila",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const carregarPrestadores = async () => {
     try {
-      const data: any = await prestadoresService.getAll();
-      const lista = Array.isArray(data) ? data : [];
+      const response: any = await prestadoresService.getAll();
+      const lista = response.data || [];
       setPrestadores(lista.filter((p: any) => p.telefone));
     } catch (error) {
       console.error("Erro ao carregar prestadores:", error);
@@ -57,8 +116,8 @@ export default function WhatsApp() {
 
   const carregarMontadores = async () => {
     try {
-      const data: any = await montadoresService.getAll();
-      const lista = Array.isArray(data) ? data : [];
+      const response: any = await montadoresService.getAll();
+      const lista = response.data || [];
       setMontadores(lista.filter((m: any) => m.telefone));
     } catch (error) {
       console.error("Erro ao carregar montadores:", error);
@@ -174,14 +233,17 @@ export default function WhatsApp() {
                     {!status && (
                       <Badge variant="outline">Clique em Atualizar</Badge>
                     )}
-                    {status?.status === "error" && (
+                    {status?.server_running === false && (
                       <Badge variant="destructive">Offline</Badge>
                     )}
                     {status?.status === "connected" && (
                       <Badge className="bg-green-500">Conectado</Badge>
                     )}
-                    {status?.status && status.status !== "error" && status.status !== "connected" && (
-                      <Badge variant="secondary">Aguardando</Badge>
+                    {status?.status === "qr_ready" && (
+                      <Badge variant="secondary" className="bg-orange-500 text-white">Aguardando QR</Badge>
+                    )}
+                    {status?.status === "initializing" && (
+                      <Badge variant="secondary">Inicializando...</Badge>
                     )}
                   </CardContent>
                 </Card>
@@ -192,7 +254,7 @@ export default function WhatsApp() {
                   </CardHeader>
                   <CardContent>
                     {status?.hasQrCode && (
-                      <Badge variant="outline">QR Code Disponível</Badge>
+                      <Badge variant="outline" className="bg-orange-500 text-white">QR Code Pronto</Badge>
                     )}
                     {status?.status === "connected" && (
                       <Badge className="bg-green-500">Autenticado</Badge>
@@ -208,8 +270,8 @@ export default function WhatsApp() {
                     <CardTitle className="text-sm font-medium">Usuário</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {status?.status === "connected" ? (
-                      <p className="text-sm text-foreground truncate">Conectado</p>
+                    {status?.info?.name ? (
+                      <p className="text-sm text-foreground truncate">{status.info.name}</p>
                     ) : (
                       <Badge variant="secondary">N/A</Badge>
                     )}
@@ -217,15 +279,67 @@ export default function WhatsApp() {
                 </Card>
               </div>
 
-              {status?.status !== "connected" && (
+              {/* Controles do Servidor */}
+              <div className="flex gap-2 justify-center flex-wrap">
+                {status?.server_running === false ? (
+                  <Button onClick={iniciarServidor} disabled={loading} className="bg-green-600 hover:bg-green-700">
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Iniciar Servidor WhatsApp
+                  </Button>
+                ) : (
+                  <>
+                    <Button onClick={pararServidor} disabled={loading} variant="destructive">
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Parar Servidor
+                    </Button>
+                    {status?.status === "connected" && (
+                      <Button onClick={processarFila} disabled={loading} variant="outline">
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Processar Fila Pendente
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* QR Code */}
+              {status?.hasQrCode && status?.qrCode && (
+                <div className="flex flex-col items-center space-y-4">
+                  <Separator />
+                  <h3 className="text-lg font-semibold">📱 Escaneie o QR Code</h3>
+                  <div className="bg-white p-4 rounded-lg shadow-lg">
+                    <img src={status.qrCode} alt="QR Code WhatsApp" className="w-64 h-64" />
+                  </div>
+                  <div className="text-sm text-muted-foreground max-w-md text-center">
+                    <p>1. Abra o WhatsApp no celular</p>
+                    <p>2. Vá em Menu → Aparelhos conectados</p>
+                    <p>3. Toque em "Conectar um aparelho"</p>
+                    <p>4. Aponte a câmera para este código</p>
+                  </div>
+                </div>
+              )}
+
+              {status?.status === "connected" && (
+                <Alert className="bg-green-50 border-green-200">
+                  <AlertDescription className="text-green-800">
+                    <p className="font-semibold">✅ WhatsApp Conectado!</p>
+                    <p>Você já pode enviar mensagens pela aba "Enviar Mensagens"</p>
+                    {status?.info && (
+                      <p className="mt-2">👤 Conectado como: <strong>{status.info.name}</strong> ({status.info.number})</p>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {status?.server_running === false && (
                 <Alert>
                   <AlertDescription className="space-y-2">
                     <p className="font-semibold">Como Conectar:</p>
                     <ol className="list-decimal list-inside space-y-1 text-sm">
-                      <li>Inicie o serviço WhatsApp: <code className="bg-muted px-1 rounded">npm start</code></li>
-                      <li>Acesse: <a href="http://localhost:3000/qr" target="_blank" className="text-primary hover:underline">http://localhost:3000/qr</a></li>
+                      <li>Clique no botão "Iniciar Servidor WhatsApp" acima</li>
+                      <li>Aguarde o QR Code aparecer nesta página</li>
                       <li>Escaneie o QR Code com WhatsApp → Aparelhos conectados</li>
-                      <li>Volte aqui e clique em "Atualizar Status"</li>
+                      <li>Pronto! O WhatsApp estará conectado</li>
                     </ol>
                   </AlertDescription>
                 </Alert>
@@ -405,25 +519,59 @@ export default function WhatsApp() {
           <Card>
             <CardHeader>
               <CardTitle>Configurações do Serviço</CardTitle>
+              <CardDescription>
+                O servidor WhatsApp está totalmente integrado ao sistema
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h3 className="font-semibold mb-2">URLs do Serviço</h3>
-                <div className="grid gap-2">
-                  <code className="bg-muted p-2 rounded text-sm">http://localhost:3000/status</code>
-                  <code className="bg-muted p-2 rounded text-sm">http://localhost:3000/qr</code>
-                  <code className="bg-muted p-2 rounded text-sm">http://localhost:3000/info</code>
-                  <code className="bg-muted p-2 rounded text-sm">http://localhost:3000/send</code>
+                <h3 className="font-semibold mb-2">📡 Status do Servidor</h3>
+                <div className="bg-muted p-3 rounded">
+                  <p className="text-sm">
+                    Servidor: {status?.server_running ? '✅ Rodando' : '❌ Parado'}
+                  </p>
+                  <p className="text-sm">
+                    Conexão WhatsApp: {status?.status === 'connected' ? '✅ Conectado' : '⏳ Desconectado'}
+                  </p>
                 </div>
               </div>
 
               <Separator />
 
               <div>
-                <h3 className="font-semibold mb-2">Como Iniciar o Serviço</h3>
-                <code className="bg-muted p-3 rounded block text-sm">
-                  npm start
-                </code>
+                <h3 className="font-semibold mb-2">🔧 Gerenciar Servidor</h3>
+                <div className="flex gap-2">
+                  <Button onClick={iniciarServidor} disabled={loading || status?.server_running} className="bg-green-600 hover:bg-green-700">
+                    Iniciar Servidor
+                  </Button>
+                  <Button onClick={pararServidor} disabled={loading || !status?.server_running} variant="destructive">
+                    Parar Servidor
+                  </Button>
+                  <Button onClick={atualizarStatus} disabled={loading} variant="outline">
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    Atualizar Status
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="font-semibold mb-2">📝 Informações</h3>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    • O servidor WhatsApp roda na porta 3000
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    • As credenciais são salvas automaticamente após o primeiro login
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    • Você pode parar e iniciar o servidor a qualquer momento
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    • O QR Code aparece automaticamente quando necessário
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
