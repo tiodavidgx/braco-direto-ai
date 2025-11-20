@@ -1,3 +1,57 @@
-2025/11/17-22:12:41.312 ac03 Reusing MANIFEST /Users/david/Documents/GitHub/braco-direto-ai/backend_example/.wwebjs_auth/session/Default/Local Storage/leveldb/MANIFEST-000001
-2025/11/17-22:12:41.313 ac03 Recovering log #3
-2025/11/17-22:12:41.313 ac03 Reusing old log /Users/david/Documents/GitHub/braco-direto-ai/backend_example/.wwebjs_auth/session/Default/Local Storage/leveldb/000003.log 
+2025/11/18-16:28:20.868 207879 Reusing MANIFEST /Users/david/Documents/GitHub/braco-direto-ai/backend_example/.wwebjs_auth/session/Default/Local Storage/leveldb/MANIFEST-000001
+2025/11/18-16:28:20.870 207879 Recovering log #3
+2025/11/18-16:28:20.870 207879 Reusing old log /Users/david/Documents/GitHub/braco-direto-ai/backend_example/.wwebjs_auth/session/Default/Local Storage/leveldb/000003.log 
+2025/11/18-18:15:43.580 20787f Level-0 table #5: started
+2025/11/18-18:15:43.601 20787f Level-0 table #5: 20562 bytes OK
+2025/11/18-18:15:43.608 20787f Delete type=0 #3
+2025/11/18-22:14:54.142 20787f Level-0 table #7: started
+2025/11/18-22:14:54.145 20787f Level-0 table #7: 14263 bytes OK
+2025/11/18-22:14:54.148 20787f Delete type=0 #4
+2025/11/19-08:53:47.930 20787f Level-0 table #9: started
+2025/11/19-08:53:47.932 20787f Level-0 table #9: 14344 bytes OK
+2025/11/19-08:53:47.934 20787f Delete type=0 #6
+2025/11/19-11:50:24.583 20787f Level-0 table #11: started
+2025/11/19-11:50:24.588 20787f Level-0 table #11: 17916 bytes OK
+2025/11/19-11:50:24.590 20787f Delete type=0 #8
+2025/11/19-13:53:08.158 20787f Level-0 table #13: started
+2025/11/19-13:53:08.163 20787f Level-0 table #13: 18680 bytes OK
+2025/11/19-13:53:08.166 20787f Delete type=0 #10
+2025/11/19-15:19:36.433 20787f Level-0 table #15: started
+2025/11/19-15:19:36.436 20787f Level-0 table #15: 18764 bytes OK
+2025/11/19-15:19:36.439 20787f Delete type=0 #12
+2025/11/19-15:19:36.441 207879 Compacting 4@0 + 1@1 files
+2025/11/19-15:19:36.444 207879 Generated table #16@0: 8 keys, 1742 bytes
+2025/11/19-15:19:36.444 207879 Compacted 4@0 + 1@1 files => 1742 bytes
+2025/11/19-15:19:36.445 207879 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/11/19-15:19:36.446 207879 Delete type=2 #15
+2025/11/19-15:19:36.446 207879 Delete type=2 #7
+2025/11/19-15:19:36.446 207879 Delete type=2 #13
+2025/11/19-15:19:36.446 207879 Delete type=2 #11
+2025/11/19-15:19:36.446 207879 Delete type=2 #9
+2025/11/19-17:27:38.602 20787f Level-0 table #18: started
+2025/11/19-17:27:38.605 20787f Level-0 table #18: 17863 bytes OK
+2025/11/19-17:27:38.607 20787f Delete type=0 #14
+2025/11/19-20:49:22.632 20787f Level-0 table #20: started
+2025/11/19-20:49:22.658 20787f Level-0 table #20: 19524 bytes OK
+2025/11/19-20:49:22.662 20787f Delete type=0 #17
+2025/11/20-04:48:06.131 20787f Level-0 table #22: started
+2025/11/20-04:48:06.132 20787f Level-0 table #22: 17198 bytes OK
+2025/11/20-04:48:06.134 20787f Delete type=0 #19
+2025/11/20-08:19:56.648 20787f Level-0 table #24: started
+2025/11/20-08:19:56.651 20787f Level-0 table #24: 17484 bytes OK
+2025/11/20-08:19:56.654 20787f Delete type=0 #21
+2025/11/20-08:19:56.655 20787f Compacting 4@0 + 1@1 files
+2025/11/20-08:19:56.658 20787f Generated table #25@0: 14 keys, 2085 bytes
+2025/11/20-08:19:56.658 20787f Compacted 4@0 + 1@1 files => 2085 bytes
+2025/11/20-08:19:56.659 20787f compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/11/20-08:19:56.659 20787f Delete type=2 #16
+2025/11/20-08:19:56.659 20787f Delete type=2 #20
+2025/11/20-08:19:56.659 20787f Delete type=2 #22
+2025/11/20-08:19:56.659 20787f Delete type=2 #18
+2025/11/20-08:19:56.659 20787f Delete type=2 #24
+2025/11/20-10:51:26.019 20787f Level-0 table #27: started
+2025/11/20-10:51:26.022 20787f Level-0 table #27: 18702 bytes OK
+2025/11/20-10:51:26.025 20787f Delete type=0 #23
+2025/11/20-13:16:46.592 20787f Level-0 table #29: started
+2025/11/20-13:16:46.597 20787f Level-0 table #29: 18745 bytes OK
+2025/11/20-13:16:46.605 20787f Delete type=0 #26

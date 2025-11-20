@@ -793,7 +793,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 html_content = template.render(**context)
                 
                 # Converter HTML para PDF usando WeasyPrint
-                from weasyprint import HTML
+                # from weasyprint import HTML  # DESABILITADO - precisa de libs do sistema
                 import tempfile
                 import os
                 
@@ -803,7 +803,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
                 
                 # Gerar PDF a partir do HTML
-                HTML(string=html_content).write_pdf(pdf_path)
+                # HTML(string=html_content).write_pdf(pdf_path)  # DESABILITADO
                 
                 # Montar corpo do email
                 corpo_email = f"""
@@ -945,7 +945,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 html_content = template.render(**context)
                 
                 # Converter HTML para PDF usando WeasyPrint
-                from weasyprint import HTML
+                # from weasyprint import HTML  # DESABILITADO - precisa de libs do sistema
                 import tempfile
                 import os
                 
@@ -955,7 +955,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
                 
                 # Gerar PDF a partir do HTML
-                HTML(string=html_content).write_pdf(pdf_path)
+                # HTML(string=html_content).write_pdf(pdf_path)  # DESABILITADO
                 
                 # Enviar email
                 corpo_email = f"""
@@ -1257,9 +1257,9 @@ def enviar_lote_relatorios(request: dict):
                 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 
                 if tipo == "prestador":
-                    cur.execute("SELECT id, email FROM prestadores WHERE nome = %s", (nome_destinatario,))
+                    cur.execute("SELECT id, email, tempo_vencimento_dias FROM prestadores WHERE nome = %s", (nome_destinatario,))
                 else:
-                    cur.execute("SELECT id, email FROM montadores WHERE nome = %s", (nome_destinatario,))
+                    cur.execute("SELECT id, email, tempo_vencimento_dias FROM montadores WHERE nome = %s", (nome_destinatario,))
                 
                 resultado = cur.fetchone()
                 
@@ -1274,6 +1274,7 @@ def enviar_lote_relatorios(request: dict):
                 
                 destinatario_id = resultado["id"]
                 email_destino = resultado["email"]
+                tempo_vencimento_dias = resultado.get("tempo_vencimento_dias")
                 
                 # === CRIAR LOTE NO BANCO ANTES DO ENVIO ===
                 total_geral = sum(float(item.get("valor_total", 0)) for item in itens)
@@ -1282,13 +1283,19 @@ def enviar_lote_relatorios(request: dict):
                 if tipo == "prestador":
                     periodo = itens[0].get("periodo", "N/A")
                     
+                    # Calcular data de vencimento se tempo_vencimento_dias estiver definido
+                    data_vencimento = None
+                    if tempo_vencimento_dias:
+                        from datetime import timedelta
+                        data_vencimento = datetime.now().date() + timedelta(days=tempo_vencimento_dias)
+                    
                     # Criar lote de serviço
                     cur.execute("""
                         INSERT INTO lotes_servico 
-                        (prestador_id, prestador_nome, periodo, valor_total, data_envio, status)
-                        VALUES (%s, %s, %s, %s, NOW(), 'Em Aberto')
+                        (prestador_id, prestador_nome, periodo, valor_total, data_envio, data_vencimento_pagamento, status)
+                        VALUES (%s, %s, %s, %s, NOW(), %s, 'Em Aberto')
                         RETURNING id
-                    """, (destinatario_id, nome_destinatario, periodo, total_geral))
+                    """, (destinatario_id, nome_destinatario, periodo, total_geral, data_vencimento))
                     lote_id = cur.fetchone()['id']
                     print(f"   ✅ Lote #{lote_id} criado no banco")
                     
@@ -1472,14 +1479,20 @@ def enviar_lote_relatorios(request: dict):
                         "total_geral": total_comissoes + total_adicionais + total_auxilio
                     }
                     
+                    # Calcular data de vencimento se tempo_vencimento_dias estiver definido
+                    data_vencimento_montador = None
+                    if tempo_vencimento_dias:
+                        from datetime import timedelta
+                        data_vencimento_montador = datetime.now().date() + timedelta(days=tempo_vencimento_dias)
+                    
                     # SEMPRE criar novo registro (não reutilizar por período)
                     # Cada envio deve ter seu próprio lote e link único
                     cur.execute("""
                         INSERT INTO envios_montagem 
-                        (montador_id, montador_nome, periodo, valor_total, data_envio, status, quantidade_os, detalhes)
-                        VALUES (%s, %s, %s, %s, NOW(), 'Em Aberto', %s, %s)
+                        (montador_id, montador_nome, periodo, valor_total, data_envio, data_vencimento_pagamento, status, quantidade_os, detalhes)
+                        VALUES (%s, %s, %s, %s, NOW(), %s, 'Em Aberto', %s, %s)
                         RETURNING id
-                    """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], len(itens), psycopg2.extras.Json(detalhes_json)))
+                    """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], data_vencimento_montador, len(itens), psycopg2.extras.Json(detalhes_json)))
                     lote_id = cur.fetchone()['id']
                     print(f"   ✅ Novo envio #{lote_id} criado no banco (período: {periodo_relatorio})")
 
@@ -1791,6 +1804,38 @@ def enviar_lote_relatorios(request: dict):
                     
                     # Gerar PDF usando template HTML original
                     print(f"   📄 Gerando PDF do prestador...")
+                    
+                    # Configurar caminhos das bibliotecas para WeasyPrint (macOS)
+                    import os
+                    import sys
+                    import ctypes.util
+                    
+                    # Monkey patch para ctypes.util.find_library encontrar libs do Homebrew
+                    _original_find_library = ctypes.util.find_library
+                    
+                    def _custom_find_library(name):
+                        # Primeiro tenta o método original
+                        result = _original_find_library(name)
+                        if result:
+                            return result
+                        
+                        # Se não encontrou, procura no Homebrew
+                        homebrew_paths = [
+                            f"/opt/homebrew/lib/lib{name}.dylib",
+                            f"/opt/homebrew/opt/glib/lib/lib{name}.dylib",
+                            f"/opt/homebrew/opt/pango/lib/lib{name}.dylib",
+                            f"/opt/homebrew/opt/cairo/lib/lib{name}.dylib",
+                            f"/opt/homebrew/opt/gdk-pixbuf/lib/lib{name}.dylib",
+                        ]
+                        
+                        for path in homebrew_paths:
+                            if os.path.exists(path):
+                                return path
+                        
+                        return None
+                    
+                    ctypes.util.find_library = _custom_find_library
+                    
                     from jinja2 import Template
                     from pathlib import Path
                     from weasyprint import HTML

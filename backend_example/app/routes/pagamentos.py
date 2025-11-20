@@ -9,6 +9,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from database import get_db_connection
+from app.utils.whatsapp_automation import enviar_notificacao_whatsapp
 
 router = APIRouter(tags=["pagamentos"])
 
@@ -170,41 +171,172 @@ def desmarcar_todos_como_pagos():
             }
 
 @router.post("/lote/{id}/marcar-pago")
-def marcar_lote_como_pago(id: int):
+async def marcar_lote_como_pago(id: int):
     """Marca um lote específico como pago"""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             data_hoje = datetime.now().date()
             
+            # Buscar informações do lote antes de marcar como pago
+            cur.execute("""
+                SELECT 
+                    ls.prestador_id,
+                    ls.periodo,
+                    ls.valor_total,
+                    p.nome as prestador_nome,
+                    p.telefone
+                FROM lotes_servico ls
+                JOIN prestadores p ON ls.prestador_id = p.id
+                WHERE ls.id = %s
+            """, (id,))
+            
+            lote_info = cur.fetchone()
+            
+            if not lote_info:
+                raise HTTPException(status_code=404, detail="Lote não encontrado")
+            
+            prestador_id, periodo, valor_total, prestador_nome, telefone = lote_info
+            
+            # Marcar como pago
             cur.execute("""
                 UPDATE lotes_servico 
                 SET data_pagamento = %s
                 WHERE id = %s
             """, (data_hoje, id))
             
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Lote não encontrado")
-            
             conn.commit()
+            
+            # Enviar notificação WhatsApp
+            try:
+                print(f"\n📱 Enviando notificação de pagamento realizado...")
+                enviar_notificacao_whatsapp(
+                    evento='pagamento_realizado_prestador',
+                    destinatario_id=prestador_id,
+                    tipo='prestador',
+                    variaveis={
+                        'nome_prestador': prestador_nome,
+                        'periodo': periodo,
+                        'valor': str(valor_total),
+                        'data_pagamento': data_hoje.strftime('%d/%m/%Y')
+                    }
+                )
+            except Exception as e:
+                print(f"⚠️ Erro ao enviar WhatsApp: {str(e)}")
+                # Não falha a operação se WhatsApp der erro
+            
+            # Enviar notificação WebSocket
+            try:
+                from app.routes.notifications import notification_manager
+                await notification_manager.send_notification(
+                    tipo="success",
+                    titulo=f"💰 Pagamento Realizado - Lote #{id}",
+                    mensagem=f"{prestador_nome} - Pagamento de R$ {valor_total:.2f} realizado",
+                    dados={
+                        "lote_id": id,
+                        "tipo": "prestador",
+                        "prestador": prestador_nome,
+                        "periodo": periodo,
+                        "valor": float(valor_total),
+                        "data_pagamento": data_hoje.strftime('%d/%m/%Y')
+                    }
+                )
+                print(f"   📡 Notificação WebSocket enviada")
+            except Exception as e:
+                print(f"⚠️ Erro ao enviar notificação WebSocket: {str(e)}")
             
             return {'message': 'Lote marcado como pago com sucesso'}
 
 @router.post("/montagem/{id}/marcar-pago")
-def marcar_montagem_como_paga(id: int):
+async def marcar_montagem_como_paga(id: int):
     """Marca uma montagem específica como paga"""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             data_hoje = datetime.now().date()
             
+            # Buscar informações da montagem antes de marcar como pago
+            cur.execute("""
+                SELECT 
+                    em.montador_id,
+                    em.periodo,
+                    em.valor_total,
+                    m.nome as montador_nome,
+                    m.telefone
+                FROM envios_montagem em
+                JOIN montadores m ON em.montador_id = m.id
+                WHERE em.id = %s
+            """, (id,))
+            
+            montagem_info = cur.fetchone()
+            
+            if not montagem_info:
+                raise HTTPException(status_code=404, detail="Montagem não encontrada")
+            
+            montador_id, periodo, valor_total, montador_nome, telefone = montagem_info
+            
+            # Marcar como pago
             cur.execute("""
                 UPDATE envios_montagem 
                 SET data_pagamento = %s
                 WHERE id = %s
             """, (data_hoje, id))
             
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Montagem não encontrada")
-            
             conn.commit()
+            
+            # Enviar notificação WhatsApp
+            try:
+                print(f"\n📱 Enviando notificação de pagamento realizado...")
+                enviar_notificacao_whatsapp(
+                    evento='pagamento_realizado_montador',
+                    destinatario_id=montador_id,
+                    tipo='montador',
+                    variaveis={
+                        'nome_montador': montador_nome,
+                        'periodo': periodo,
+                        'valor': str(valor_total),
+                        'data_pagamento': data_hoje.strftime('%d/%m/%Y')
+                    }
+                )
+            except Exception as e:
+                print(f"⚠️ Erro ao enviar WhatsApp: {str(e)}")
+                # Não falha a operação se WhatsApp der erro
+            
+            # Enviar notificação WebSocket
+            try:
+                from app.routes.notifications import notification_manager
+                await notification_manager.send_notification(
+                    tipo="success",
+                    titulo=f"💰 Pagamento Realizado - Montagem #{id}",
+                    mensagem=f"{montador_nome} - Pagamento de R$ {valor_total:.2f} realizado",
+                    dados={
+                        "montagem_id": id,
+                        "tipo": "montador",
+                        "montador": montador_nome,
+                        "periodo": periodo,
+                        "valor": float(valor_total),
+                        "data_pagamento": data_hoje.strftime('%d/%m/%Y')
+                    }
+                )
+                print(f"   📡 Notificação WebSocket enviada")
+            except Exception as e:
+                print(f"⚠️ Erro ao enviar notificação WebSocket: {str(e)}")
+            
+            return {'message': 'Montagem marcada como paga com sucesso'}
+            # Enviar notificação WhatsApp
+            try:
+                print(f"\n📱 Enviando notificação de pagamento realizado...")
+                enviar_notificacao_whatsapp(
+                    evento='pagamento_realizado_montador',
+                    destinatario_id=montador_id,
+                    tipo='montador',
+                    variaveis={
+                        'nome_montador': montador_nome,
+                        'periodo': periodo,
+                        'valor': str(valor_total),
+                        'data_pagamento': data_hoje.strftime('%d/%m/%Y')
+                    }
+                )
+            except Exception as e:
+                print(f"⚠️ Erro ao enviar WhatsApp: {str(e)}")
+                # Não falha a operação se WhatsApp der erro
             
             return {'message': 'Montagem marcada como paga com sucesso'}

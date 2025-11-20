@@ -26,17 +26,17 @@ whatsappClient = new Client({
         dataPath: './.wwebjs_auth'
     }),
     puppeteer: {
-        headless: true,
+        headless: false,
         args: [
             '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
+            '--disable-setuid-sandbox'
         ]
     }
+});
+
+// Handler de erro global
+whatsappClient.on('error', (error) => {
+    console.error('❌ Erro no cliente WhatsApp:', error);
 });
 
 // Event handlers
@@ -89,7 +89,9 @@ whatsappClient.on('disconnected', (reason) => {
 });
 
 // Inicializar cliente
-whatsappClient.initialize();
+whatsappClient.initialize().catch((error) => {
+    console.error('❌ Erro ao inicializar WhatsApp:', error);
+});
 
 // ============ ROTAS DA API ============
 
@@ -183,9 +185,51 @@ app.post('/send', async (req, res) => {
     
     try {
         const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
-        await whatsappClient.sendMessage(chatId, message);
         
-        console.log(`✅ Mensagem enviada para ${number}`);
+        // Verificar se a mensagem tem botões (formato: [BUTTONS]...[/BUTTONS])
+        const buttonRegex = /\[BUTTONS\]([\s\S]*?)\[\/BUTTONS\]/;
+        const buttonMatch = message.match(buttonRegex);
+        
+        if (buttonMatch) {
+            // Extrair texto e botões
+            const messageText = message.replace(buttonRegex, '').trim();
+            const buttonsText = buttonMatch[1].trim();
+            
+            // Parse dos botões (formato: [Texto do Botão|id_callback])
+            const buttonLines = buttonsText.split('\n').filter(line => line.trim());
+            const buttons = buttonLines.map((line, index) => {
+                const match = line.match(/\[(.*?)\|(.*?)\]/);
+                if (match) {
+                    return {
+                        body: match[1].trim(),
+                        id: match[2].trim()
+                    };
+                }
+                return null;
+            }).filter(btn => btn !== null);
+            
+            if (buttons.length > 0) {
+                // Enviar mensagem com botões usando Buttons do whatsapp-web.js
+                const { Buttons } = require('whatsapp-web.js');
+                const buttonMessage = new Buttons(
+                    messageText,
+                    buttons.map(btn => ({ body: btn.body, id: btn.id })),
+                    'Escolha uma opção',
+                    'Novo Mundo'
+                );
+                
+                await whatsappClient.sendMessage(chatId, buttonMessage);
+                console.log(`✅ Mensagem com ${buttons.length} botões enviada para ${number}`);
+            } else {
+                // Se não conseguiu parse dos botões, envia mensagem normal
+                await whatsappClient.sendMessage(chatId, messageText);
+                console.log(`✅ Mensagem enviada para ${number} (sem botões)`);
+            }
+        } else {
+            // Mensagem sem botões
+            await whatsappClient.sendMessage(chatId, message);
+            console.log(`✅ Mensagem enviada para ${number}`);
+        }
         
         res.json({
             success: true,

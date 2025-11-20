@@ -14,6 +14,7 @@ Este job:
 import os
 import time
 import logging
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Any
 from pathlib import Path
@@ -146,19 +147,40 @@ def atualizar_status_arquivo(lote_id: int, status: int):
 
 
 def salvar_nota_fiscal(lote_id: int, caminho_arquivo: str):
-    """Salva caminho da nota fiscal e dispara WhatsApp"""
+    """Salva caminho da nota fiscal, atualiza datas e calcula vencimento"""
+    from datetime import datetime, timedelta
+    
     with get_db_connection() as conn:
         cur = conn.cursor()
         
+        # Buscar tempo de vencimento do prestador
+        cur.execute("""
+            SELECT p.tempo_vencimento_dias 
+            FROM lotes_servico ls
+            JOIN prestadores p ON ls.prestador_id = p.id
+            WHERE ls.id = %s
+        """, (lote_id,))
+        
+        result = cur.fetchone()
+        dias_vencimento = result[0] if result and result[0] else 30
+        
+        # Calcular data de vencimento
+        data_vencimento = datetime.now() + timedelta(days=dias_vencimento)
+        
+        # Atualizar lote com todas as informações
         cur.execute("""
             UPDATE lotes_servico
             SET 
                 nota_fiscal_path = %s,
-                status_api = 1
+                status_api = 1,
+                data_recebimento_nf = NOW(),
+                data_vencimento_pagamento = %s
             WHERE id = %s
-        """, (caminho_arquivo, lote_id))
+        """, (caminho_arquivo, data_vencimento, lote_id))
         
         conn.commit()
+        
+        logger.info(f"   📅 Data vencimento: {data_vencimento.strftime('%d/%m/%Y')} ({dias_vencimento} dias)")
 
 
 def atualizar_status_api(lote_id: int, status: int):
@@ -187,6 +209,42 @@ def criar_notificacao(tipo: str, titulo: str, mensagem: str, lote_id: int, icone
         """, (tipo, titulo, mensagem, lote_id, icone, prioridade))
         
         conn.commit()
+
+
+async def enviar_notificacao_websocket(tipo: str, titulo: str, mensagem: str, dados: Dict[str, Any] = None):
+    """Envia notificação via WebSocket para todos os clientes conectados"""
+    try:
+        from app.routes.notifications import notification_manager
+        await notification_manager.send_notification(
+            tipo=tipo,
+            titulo=titulo,
+            mensagem=mensagem,
+            dados=dados or {}
+        )
+    except Exception as e:
+        logger.warning(f"⚠️  Erro ao enviar WebSocket: {e}")
+
+
+def enviar_notificacao_websocket_sync(tipo: str, titulo: str, mensagem: str, dados: Dict[str, Any] = None):
+    """Wrapper síncrono para enviar notificação WebSocket"""
+    try:
+        # Tentar executar em event loop existente ou criar novo
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Se loop já está rodando, agendar tarefa
+                asyncio.create_task(enviar_notificacao_websocket(tipo, titulo, mensagem, dados))
+            else:
+                # Se não está rodando, executar diretamente
+                loop.run_until_complete(enviar_notificacao_websocket(tipo, titulo, mensagem, dados))
+        except RuntimeError:
+            # Criar novo event loop se não houver um
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(enviar_notificacao_websocket(tipo, titulo, mensagem, dados))
+            loop.close()
+    except Exception as e:
+        logger.warning(f"⚠️  Erro ao enviar notificação WebSocket: {e}")
 
 
 def processar_uploads_pendentes():
@@ -344,7 +402,46 @@ def processar_uploads_pendentes():
                         icone='📥',
                         prioridade=1
                     )
-                    logger.info(f"   🔔 Notificação criada")
+                    logger.info(f"   🔔 Notificação criada no banco")
+                    
+                    # Enviar notificação WebSocket em tempo real
+                    enviar_notificacao_websocket_sync(
+                        tipo="success",
+                        titulo=titulo,
+                        mensagem=mensagem_notif,
+                        dados={
+                            "lote_id": lote_id,
+                            "tipo": "prestador",
+                            "prestador": prestador,
+                            "periodo": periodo,
+                            "valor": lote.get('valor_total', 0),
+                            "total_arquivos": total_arqs,
+                            "tamanho_total": stats['total_tamanho_formatado'],
+                            "nota_fiscal": primeiro_arquivo
+                        }
+                    )
+                    logger.info(f"   📡 Notificação WebSocket enviada")
+                    
+                    # Enviar notificação WhatsApp
+                    try:
+                        from app.utils.whatsapp_automation import enviar_notificacao_whatsapp
+                        from datetime import datetime
+                        
+                        enviar_notificacao_whatsapp(
+                            evento='nf_recebida_prestador',
+                            destinatario_id=lote.get('prestador_id'),
+                            tipo='prestador',
+                            variaveis={
+                                'nome_prestador': prestador,
+                                'periodo': periodo,
+                                'valor': str(lote.get('valor_total', 0)),
+                                'numero_nf': arquivos[0]['nome_original'],
+                                'data_recebimento': datetime.now().strftime('%d/%m/%Y')
+                            }
+                        )
+                        logger.info(f"   📱 Notificação WhatsApp enviada")
+                    except Exception as e:
+                        logger.warning(f"   ⚠️  Erro ao enviar WhatsApp: {e}")
                 
                 # Integração Trello - verificar se já existe card
                 trello_ja_criado = False

@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useNotifications } from "@/hooks/useNotifications";
 import { pagamentosService } from "@/services/pagamentos.service";
 import { PagamentoPendente } from "@/types/pagamento";
 import { CheckCircle2, AlertCircle, Clock, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -118,6 +119,39 @@ export default function PagamentosVencidos() {
       setLoading(false);
     }
   };
+
+  // Escutar notificações de notas fiscais recebidas e pagamentos realizados
+  useNotifications((notification) => {
+    console.log('📡 Notificação WebSocket recebida:', notification);
+    
+    // Verificar se é uma notificação de nota fiscal recebida
+    if (notification.dados?.lote_id && notification.titulo.includes('Nota Fiscal Recebida')) {
+      console.log('📥 Nova nota fiscal recebida:', notification);
+      
+      // Recarregar pagamentos automaticamente
+      carregarPagamentos();
+      
+      // Mostrar toast de notificação
+      toast({
+        title: notification.titulo,
+        description: notification.mensagem,
+      });
+    }
+    
+    // Verificar se é uma notificação de pagamento realizado
+    if (notification.titulo.includes('Pagamento Realizado')) {
+      console.log('💰 Pagamento realizado:', notification);
+      
+      // Recarregar pagamentos automaticamente
+      carregarPagamentos();
+      
+      // Mostrar toast de notificação
+      toast({
+        title: notification.titulo,
+        description: notification.mensagem,
+      });
+    }
+  });
 
   useEffect(() => {
     carregarPagamentos();
