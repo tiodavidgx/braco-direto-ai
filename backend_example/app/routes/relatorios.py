@@ -499,6 +499,46 @@ def gerar_pdf_montador_html_template(envio_data):
     """
     from jinja2 import Template
     from pathlib import Path
+    
+    # Fix para macOS e WeasyPrint (carregar bibliotecas do Homebrew)
+    import sys
+    import os
+    if sys.platform == 'darwin':
+        try:
+            # Patch para ctypes.util.find_library para ajudar o CFFI a encontrar as bibliotecas
+            import ctypes.util
+            original_find_library = ctypes.util.find_library
+            
+            def patched_find_library(name):
+                # Mapeamento de nomes que o WeasyPrint procura para os caminhos do Homebrew
+                # O WeasyPrint procura por 'gobject-2.0-0', 'pango-1.0-0', etc.
+                
+                # Normalizar nome (remover sufixo -0 se existir para busca no dicionário)
+                base_name = name
+                if name.endswith('-0'):
+                    base_name = name[:-2]
+                
+                # Caminhos comuns no Homebrew
+                homebrew_lib = '/opt/homebrew/lib'
+                
+                # Tentar mapeamento direto
+                candidates = [
+                    os.path.join(homebrew_lib, f"lib{name}.dylib"),
+                    os.path.join(homebrew_lib, f"lib{base_name}.dylib"),
+                    os.path.join(homebrew_lib, f"lib{base_name}.0.dylib")
+                ]
+                
+                for path in candidates:
+                    if os.path.exists(path):
+                        return path
+                
+                return original_find_library(name)
+            
+            ctypes.util.find_library = patched_find_library
+            
+        except Exception as e:
+            print(f"Erro ao aplicar patch no find_library: {e}")
+
     from weasyprint import HTML
     import tempfile
     import base64

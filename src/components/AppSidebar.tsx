@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -77,6 +77,15 @@ const menuItems = [
 export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
+  const [version, setVersion] = useState("...");
+
+  useEffect(() => {
+    // Carregar versão do sistema
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersion(data.version))
+      .catch(() => setVersion("1.0.0"));
+  }, []);
 
   return (
     <Sidebar className="border-r border-border">
@@ -132,9 +141,12 @@ export function AppSidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <span className="text-sm font-medium">AD</span>
           </div>
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex flex-1 flex-col overflow-hidden">
             <span className="truncate text-sm font-medium">Admin</span>
             <span className="truncate text-xs text-muted-foreground">admin@novomundo.com</span>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-xs font-mono text-muted-foreground">v{version}</span>
           </div>
         </div>
       </SidebarFooter>

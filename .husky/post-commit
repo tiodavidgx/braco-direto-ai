@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Atualiza a versão automaticamente após cada commit
+node scripts/update-version.cjs
+
+# Adiciona o version.json atualizado ao commit anterior
+git add version.json
+git commit --amend --no-edit --no-verify

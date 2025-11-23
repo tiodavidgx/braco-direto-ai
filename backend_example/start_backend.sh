@@ -13,5 +13,10 @@ export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig"
 # Navegar para o diretório correto
 cd /Users/david/Documents/GitHub/braco-direto-ai/backend_example
 
-# Iniciar o backend
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Ativar ambiente virtual se existir
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
+
+# Iniciar o backend usando o Python do ambiente virtual
+./venv/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
