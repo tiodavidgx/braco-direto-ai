@@ -1,75 +1,75 @@
 {
-  "version": "1.1.438",
+  "version": "1.1.679",
   "lastUpdate": "2025-11-23",
   "changelog": [
     {
-      "version": "1.1.438",
+      "version": "1.1.679",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.437",
+      "version": "1.1.678",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.436",
+      "version": "1.1.677",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.435",
+      "version": "1.1.676",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.434",
+      "version": "1.1.675",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.433",
+      "version": "1.1.674",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.432",
+      "version": "1.1.673",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.431",
+      "version": "1.1.672",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.430",
+      "version": "1.1.671",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     },
     {
-      "version": "1.1.429",
+      "version": "1.1.670",
       "date": "2025-11-23",
       "changes": [
-        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+        "Update version.json"
       ]
     }
   ]
