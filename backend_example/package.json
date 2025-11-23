@@ -4,18 +4,22 @@
   "description": "WhatsApp Web Server",
   "main": "whatsapp_server.js",
   "scripts": {
-    "start": "node whatsapp_server.js"
+    "start": "node whatsapp_server.js",
+    "prepare": "husky"
   },
   "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "whatsapp-web.js": "^1.23.0",
+    "puppeteer": "^24.15.0",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2",
-    "puppeteer": "^24.15.0"
+    "whatsapp-web.js": "^1.23.0"
   },
   "overrides": {
     "puppeteer": "^24.15.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

@@ -1,0 +1,76 @@
+{
+  "version": "1.1.256",
+  "lastUpdate": "2025-11-23",
+  "changelog": [
+    {
+      "version": "1.1.256",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.255",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.254",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.253",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.252",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.251",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.250",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.249",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.248",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    },
+    {
+      "version": "1.1.247",
+      "date": "2025-11-23",
+      "changes": [
+        "Add Trello CRUD service, SQL scripts, and docs\n\nIntroduces backend Trello card CRUD service, related SQL migration scripts, and documentation for versioning. Adds Husky hooks, updates jobs and routes, and includes new uploads and test files. Also updates dependencies and various backend files."
+      ]
+    }
+  ]
+}

@@ -15,9 +15,13 @@ router = APIRouter()
 WHATSAPP_BASE_URL = "http://localhost:3000"
 WHATSAPP_PROCESS = None
 # whatsapp.py está em: backend_example/app/routes/whatsapp.py
-# whatsapp_server.js está em: backend_example/whatsapp_server.js
-# Precisamos subir 2 níveis: routes -> app -> backend_example
-WHATSAPP_SERVER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "whatsapp_server.js")
+# server.js está em: whatsapp-service/server.js
+# Precisamos subir 3 níveis para chegar à raiz e entrar em whatsapp-service
+WHATSAPP_SERVER_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
+    "whatsapp-service", 
+    "server.js"
+)
 
 
 class SendMessageRequest(BaseModel):
@@ -95,9 +99,13 @@ def start_whatsapp_server():
         pass
     
     try:
+        # Configurar PATH para incluir caminhos comuns do Node.js
+        env = os.environ.copy()
+        env['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
+        
         # Verificar se o Node.js está instalado
         print("🔍 Verificando Node.js...")
-        node_check = subprocess.run(["node", "--version"], capture_output=True, text=True)
+        node_check = subprocess.run(["node", "--version"], capture_output=True, text=True, env=env)
         print(f"   Node version: {node_check.stdout.strip()}")
         if node_check.returncode != 0:
             raise HTTPException(status_code=500, detail="Node.js não está instalado")
@@ -121,17 +129,35 @@ def start_whatsapp_server():
         
         # Iniciar servidor WhatsApp em background
         print("🚀 Iniciando servidor WhatsApp...")
+        print(f"   Comando: node {WHATSAPP_SERVER_PATH}")
+        print(f"   Diretório: {os.path.dirname(WHATSAPP_SERVER_PATH)}")
+        
         WHATSAPP_PROCESS = subprocess.Popen(
             ["node", WHATSAPP_SERVER_PATH],
             cwd=os.path.dirname(WHATSAPP_SERVER_PATH),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            start_new_session=True
+            start_new_session=True,
+            env=env  # Usar o ambiente modificado com PATH correto
         )
         print(f"   PID: {WHATSAPP_PROCESS.pid}")
         
         # Aguardar um pouco para o servidor iniciar
-        time.sleep(2)
+        print("⏳ Aguardando servidor inicializar...")
+        time.sleep(3)
+        
+        # Verificar se o processo está vivo
+        poll_result = WHATSAPP_PROCESS.poll()
+        if poll_result is not None:
+            # Processo morreu
+            stdout, stderr = WHATSAPP_PROCESS.communicate()
+            error_msg = stderr.decode('utf-8') if stderr else "Sem mensagem de erro"
+            print(f"❌ Processo morreu com código: {poll_result}")
+            print(f"   STDERR: {error_msg}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Servidor falhou ao iniciar: {error_msg}"
+            )
         
         # Verificar se iniciou
         print("🔍 Verificando se servidor respondeu...")
@@ -176,9 +202,9 @@ def stop_whatsapp_server():
         
         # Encontrar e matar o processo
         try:
-            # No macOS/Linux, procurar pelo processo node rodando whatsapp_server.js
+            # No macOS/Linux, procurar pelo processo node rodando server.js (whatsapp-service)
             result = subprocess.run(
-                ["pgrep", "-f", "whatsapp_server.js"],
+                ["pgrep", "-f", "whatsapp-service/server.js"],
                 capture_output=True,
                 text=True
             )

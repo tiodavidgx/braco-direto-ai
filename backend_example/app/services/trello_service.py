@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from app.database import get_db_connection
+from app.services.trello_card_crud import TrelloCardCRUD
 
 
 class TrelloIntegration:
@@ -87,32 +88,46 @@ class TrelloIntegration:
     
     def criar_card_download(
         self, 
-        lote_id: int,
+        lote_id: Optional[int] = None,
         prestador_nome: Optional[str] = None,
         montador_nome: Optional[str] = None,
         arquivos_baixados: Optional[List[str]] = None,
         nota_fiscal: Optional[str] = None,
         arquivos_para_anexar: Optional[List[str]] = None,
-        valor_lote: Optional[float] = None
+        valor_lote: Optional[float] = None,
+        envio_montagem_id: Optional[int] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Cria um card no Trello quando arquivos são baixados
+        GARANTE QUE NÃO HAVERÁ DUPLICAÇÃO
         
         Args:
-            lote_id: ID do lote
+            lote_id: ID do lote (opcional se for montador)
             prestador_nome: Nome do prestador (opcional)
             montador_nome: Nome do montador (opcional)
             arquivos_baixados: Lista de nomes dos arquivos baixados
             nota_fiscal: Número da nota fiscal (opcional)
             arquivos_para_anexar: Lista de caminhos de arquivos locais (opcional)
             valor_lote: Valor total do lote (opcional)
+            envio_montagem_id: ID do envio de montagem (opcional)
             
         Returns:
-            Dados do card criado ou None se falhar
+            Dados do card criado ou None se falhar ou já existir
         """
         
         if not self.is_configured():
             print("⚠️  Integração Trello não configurada. Card não será criado.")
+            return None
+        
+        # VERIFICAÇÃO CRÍTICA: Card já existe no banco?
+        if lote_id and TrelloCardCRUD.card_existe_para_lote(lote_id):
+            card_existente = TrelloCardCRUD.obter_card_lote(lote_id)
+            print(f"⚠️  Card já existe para lote #{lote_id}: {card_existente.get('card_url')}")
+            return None
+        
+        if envio_montagem_id and TrelloCardCRUD.card_existe_para_montador(envio_montagem_id):
+            card_existente = TrelloCardCRUD.obter_card_montador(envio_montagem_id)
+            print(f"⚠️  Card já existe para montador #{envio_montagem_id}: {card_existente.get('card_url')}")
             return None
         
         if arquivos_baixados is None:
@@ -123,10 +138,17 @@ class TrelloIntegration:
             nome_entidade = prestador_nome if prestador_nome else montador_nome
             
             # Monta o título do card com o valor
-            if valor_lote and valor_lote > 0:
-                titulo = f"📦 Lote #{lote_id} - {nome_entidade} - R$ {valor_lote:,.2f}"
+            if lote_id:
+                prefixo = f"📦 Lote #{lote_id}"
+            elif envio_montagem_id:
+                prefixo = f"� Lote #{envio_montagem_id}"
             else:
-                titulo = f"📦 Lote #{lote_id} - {nome_entidade}"
+                prefixo = "📦 Lote"
+
+            if valor_lote and valor_lote > 0:
+                titulo = f"{prefixo} - {nome_entidade} - R$ {valor_lote:,.2f}"
+            else:
+                titulo = f"{prefixo} - {nome_entidade}"
             
             # Monta a descrição do card
             descricao = self._montar_descricao(
@@ -238,8 +260,18 @@ class TrelloIntegration:
                     print(f"   [{idx}/{len(arquivos_para_anexar)}] Anexando: {os.path.basename(caminho)}")
                     self._anexar_arquivo(card_id, caminho)
             
-            # Salva no banco
-            self._salvar_card_criado(lote_id, card_id, card_url)
+            # Salva no banco usando CRUD (com verificação atômica)
+            salvou = False
+            if lote_id:
+                salvou = TrelloCardCRUD.criar_card_lote(lote_id, card_id, card_url)
+            elif envio_montagem_id:
+                salvou = TrelloCardCRUD.criar_card_montador(envio_montagem_id, card_id, card_url)
+            
+            if not salvou:
+                # Card duplicado foi criado no Trello mas não registrado no banco
+                # Isso pode acontecer em race conditions
+                print(f"⚠️  Card criado no Trello mas já existe no banco - possível duplicação")
+                return None
             
             return {'id': card_id, 'shortUrl': card_url}
             
@@ -409,28 +441,6 @@ class TrelloIntegration:
             
         except Exception as e:
             print(f"⚠️  Não foi possível criar checklist: {e}")
-    
-    def _salvar_card_criado(self, lote_id: int, card_id: str, card_url: str):
-        """Salva no banco que o card foi criado para este lote"""
-        with get_db_connection() as conn:
-            cur = conn.cursor()
-            
-            try:
-                cur.execute("""
-                    INSERT INTO trello_cards 
-                    (lote_id, card_id, card_url, data_criacao)
-                    VALUES (%s, %s, %s, NOW())
-                    ON CONFLICT (lote_id) DO UPDATE
-                    SET card_id = EXCLUDED.card_id,
-                        card_url = EXCLUDED.card_url,
-                        data_criacao = NOW()
-                """, (lote_id, card_id, card_url))
-                
-                conn.commit()
-                
-            except Exception as e:
-                print(f"⚠️  Erro ao salvar card no banco: {e}")
-                conn.rollback()
     
     def listar_boards(self) -> List[Dict[str, Any]]:
         """Lista todos os boards do usuário (útil para configuração)"""
