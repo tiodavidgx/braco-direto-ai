@@ -1,75 +1,75 @@
 {
-  "version": "1.1.679",
-  "lastUpdate": "2025-11-23",
+  "version": "1.1.1426",
+  "lastUpdate": "2025-12-03",
   "changelog": [
     {
-      "version": "1.1.679",
-      "date": "2025-11-23",
+      "version": "1.1.1426",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.678",
-      "date": "2025-11-23",
+      "version": "1.1.1425",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.677",
-      "date": "2025-11-23",
+      "version": "1.1.1424",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.676",
-      "date": "2025-11-23",
+      "version": "1.1.1423",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.675",
-      "date": "2025-11-23",
+      "version": "1.1.1422",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.674",
-      "date": "2025-11-23",
+      "version": "1.1.1421",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.673",
-      "date": "2025-11-23",
+      "version": "1.1.1420",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.672",
-      "date": "2025-11-23",
+      "version": "1.1.1419",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.671",
-      "date": "2025-11-23",
+      "version": "1.1.1418",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     },
     {
-      "version": "1.1.670",
-      "date": "2025-11-23",
+      "version": "1.1.1417",
+      "date": "2025-12-03",
       "changes": [
-        "Update version.json"
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
       ]
     }
   ]

@@ -32,6 +32,22 @@ class EnvioRelatorioRequest(BaseModel):
 # Configuração Microsoft Graph
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 
+def normalize_os_number(value):
+    """
+    Normaliza o número da O.S. para comparação
+    Remove espaços, converte para string, lowercase e remove .0 final (comum em Excel)
+    """
+    if value is None:
+        return ""
+    
+    s = str(value).strip().lower()
+    
+    # Remover .0 final se existir (conversão de float do Excel)
+    if s.endswith('.0'):
+        s = s[:-2]
+        
+    return s
+
 def check_os_sent(os_numbers):
     """
     Verifica quais O.S. já foram enviadas anteriormente
@@ -48,14 +64,21 @@ def check_os_sent(os_numbers):
     if not os_numbers:
         return []
     
-    # Converter todos os números para string e normalizar (remover espaços, lowercase)
-    os_numbers_str = [str(os).strip().lower() for os in os_numbers if os]
+    # Converter todos os números para string e normalizar
+    os_numbers_str = [normalize_os_number(os) for os in os_numbers if os]
+    
+    # Remover duplicatas e vazios
+    os_numbers_str = list(set([os for os in os_numbers_str if os]))
+    
+    if not os_numbers_str:
+        return []
     
     print(f"\n🔍 check_os_sent - Verificando {len(os_numbers_str)} O.S.")
     print(f"   Primeiras 5 O.S. a verificar: {os_numbers_str[:5]}")
     
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Usar ANY com array para performance
             cur.execute("""
                 SELECT DISTINCT LOWER(TRIM(os_numero)) as os_numero
                 FROM os_enviadas 
@@ -63,6 +86,25 @@ def check_os_sent(os_numbers):
             """, (os_numbers_str,))
             
             sent_os = [row['os_numero'] for row in cur.fetchall()]
+            
+            # Também verificar se existe alguma O.S. com .0 no banco que corresponda
+            # (caso o banco tenha salvo errado anteriormente)
+            if not sent_os and any(not x.endswith('.0') for x in os_numbers_str):
+                 # Se não achou nada, tenta ver se no banco está salvo com .0
+                 os_with_dot_zero = [f"{x}.0" for x in os_numbers_str]
+                 cur.execute("""
+                    SELECT DISTINCT LOWER(TRIM(os_numero)) as os_numero
+                    FROM os_enviadas 
+                    WHERE LOWER(TRIM(os_numero)) = ANY(%s)
+                """, (os_with_dot_zero,))
+                 
+                 # Se achou com .0, precisamos retornar a versão normalizada (sem .0) para o match funcionar
+                 found_with_dot = [row['os_numero'] for row in cur.fetchall()]
+                 for os_dot in found_with_dot:
+                     if os_dot.endswith('.0'):
+                         sent_os.append(os_dot[:-2])
+                     else:
+                         sent_os.append(os_dot)
     
     print(f"   ✅ Encontradas {len(sent_os)} O.S. já enviadas")
     if sent_os:
@@ -1159,7 +1201,9 @@ def enviar_lote_relatorios(request: dict):
         print(f"   Na blacklist: {len(blacklisted_os)} → {blacklisted_os}")
         
         # Adicionar status de cada O.S. para retornar ao frontend
-        for os_num in all_os_numbers:
+        for os_num_raw in all_os_numbers:
+            os_num = normalize_os_number(os_num_raw)
+            
             if os_num in blacklisted_os:
                 status = "Na blacklist"
             elif os_num in sent_os:
@@ -1168,14 +1212,15 @@ def enviar_lote_relatorios(request: dict):
                 status = "Pendente"
             
             os_status_list.append({
-                "os": os_num,
+                "os": os_num_raw,
                 "status": status
             })
         
         # Filtrar dados para enviar apenas os pendentes
         dados_filtrados = []
         for item in dados:
-            os_num = str(item.get("o_s", "")).strip().lower()
+            os_num = normalize_os_number(item.get("o_s", ""))
+            
             if os_num in blacklisted_os:
                 print(f"   ⚠️  O.S. {item.get('o_s')} - Na blacklist (ignorada)")
                 ignorados += 1
@@ -1341,7 +1386,7 @@ def enviar_lote_relatorios(request: dict):
                     
                     # Inserir O.S. no lote
                     for item in itens:
-                        os_numero = item.get('o_s', '')
+                        os_numero = normalize_os_number(item.get('o_s', ''))
                         if os_numero:
                             cur.execute("""
                                 INSERT INTO os_enviadas (lote_id, os_numero, detalhes)

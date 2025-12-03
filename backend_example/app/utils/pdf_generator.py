@@ -10,7 +10,7 @@ from reportlab.lib.units import mm, cm
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
 from reportlab.pdfgen import canvas
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from jinja2 import Template
 
@@ -543,8 +543,33 @@ def gerar_pdf_prestador_html(lote_data: dict, output_path: str):
     items_fmt = []
     for os_item in lote_data.get('os_list', []):
         data_exec = os_item.get('data_execucao', '')
+        
+        # Tratamento robusto de data
         if isinstance(data_exec, datetime):
             data_exec = data_exec.strftime('%d/%m/%Y')
+        elif isinstance(data_exec, str) and '-' in data_exec:
+            # Tentar converter string ISO (YYYY-MM-DD)
+            try:
+                dt = datetime.strptime(data_exec.split('T')[0], '%Y-%m-%d')
+                data_exec = dt.strftime('%d/%m/%Y')
+            except:
+                pass # Mantém original se falhar
+        elif isinstance(data_exec, (int, float)):
+            # Caso venha como timestamp ou número do Excel (45985)
+            try:
+                # Excel date serial number (dias desde 1900-01-01)
+                # Ajuste para datas do Excel (base 1899-12-30)
+                dt = datetime(1899, 12, 30) + timedelta(days=float(data_exec))
+                data_exec = dt.strftime('%d/%m/%Y')
+            except:
+                pass
+        elif isinstance(data_exec, str) and data_exec.isdigit():
+             # Caso venha como string numérica "45985"
+            try:
+                dt = datetime(1899, 12, 30) + timedelta(days=float(data_exec))
+                data_exec = dt.strftime('%d/%m/%Y')
+            except:
+                pass
         
         items_fmt.append({
             "OS": os_item.get('o_s', ''),
