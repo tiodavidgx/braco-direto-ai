@@ -361,7 +361,7 @@ def gerar_pdf_montador(envio_data: dict, output_path: str):
     percentual_comissao = float(envio_data.get('percentual_comissao', 0))
     
     info_data = [
-        ['Montador:', envio_data.get('montador_nome', 'N/A')],
+        ['Empresa montadora:', envio_data.get('montador_nome', 'N/A')],
         ['Período:', envio_data.get('periodo', 'N/A')],
         ['ID do Envio:', str(envio_data.get('id', 'N/A'))],
         ['Comissão:', f"{percentual_comissao:.1f}%"],

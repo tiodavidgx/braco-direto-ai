@@ -1,75 +1,75 @@
 {
-  "version": "1.1.1426",
-  "lastUpdate": "2025-12-03",
+  "version": "1.1.2191",
+  "lastUpdate": "2025-12-06",
   "changelog": [
     {
-      "version": "1.1.1426",
-      "date": "2025-12-03",
+      "version": "1.1.2191",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1425",
-      "date": "2025-12-03",
+      "version": "1.1.2190",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1424",
-      "date": "2025-12-03",
+      "version": "1.1.2189",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1423",
-      "date": "2025-12-03",
+      "version": "1.1.2188",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1422",
-      "date": "2025-12-03",
+      "version": "1.1.2187",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1421",
-      "date": "2025-12-03",
+      "version": "1.1.2186",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1420",
-      "date": "2025-12-03",
+      "version": "1.1.2185",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1419",
-      "date": "2025-12-03",
+      "version": "1.1.2184",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1418",
-      "date": "2025-12-03",
+      "version": "1.1.2183",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     },
     {
-      "version": "1.1.1417",
-      "date": "2025-12-03",
+      "version": "1.1.2182",
+      "date": "2025-12-06",
       "changes": [
-        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
       ]
     }
   ]
