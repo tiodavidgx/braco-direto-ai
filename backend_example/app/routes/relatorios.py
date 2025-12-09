@@ -32,6 +32,7 @@ class EnvioRelatorioRequest(BaseModel):
 # Configuração Microsoft Graph
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
 
+<<<<<<< HEAD
 def converter_data_excel(data_value):
     """
     Converte data do Excel (número serial) ou outros formatos para dd/mm/yyyy
@@ -81,6 +82,8 @@ def converter_data_excel(data_value):
     
     return str(data_value)
 
+=======
+>>>>>>> d581fb9bd3cdcd06847ea13fd81a0f29a0434b8a
 def normalize_os_number(value):
     """
     Normaliza o número da O.S. para comparação
