@@ -10,7 +10,7 @@ import requests
 from jinja2 import Template
 from pathlib import Path
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.routes.auth import get_valid_access_token
 from xhtml2pdf import pisa
 import io
@@ -31,6 +31,55 @@ class EnvioRelatorioRequest(BaseModel):
 
 # Configuração Microsoft Graph
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
+
+def converter_data_excel(data_value):
+    """
+    Converte data do Excel (número serial) ou outros formatos para dd/mm/yyyy
+    Excel armazena datas como dias desde 30/12/1899
+    """
+    if data_value is None or data_value == '':
+        return ''
+    
+    # Se já é um objeto datetime
+    if hasattr(data_value, 'strftime'):
+        return data_value.strftime('%d/%m/%Y')
+    
+    # Se é número (int ou float) - número serial do Excel
+    if isinstance(data_value, (int, float)):
+        try:
+            # Excel date serial number (dias desde 30/12/1899)
+            excel_epoch = datetime(1899, 12, 30)
+            dt = excel_epoch + timedelta(days=float(data_value))
+            return dt.strftime('%d/%m/%Y')
+        except:
+            return str(data_value)
+    
+    # Se é string
+    if isinstance(data_value, str):
+        data_str = data_value.strip()
+        
+        # Se é string numérica (ex: "45983")
+        if data_str.replace('.', '').isdigit():
+            try:
+                excel_epoch = datetime(1899, 12, 30)
+                dt = excel_epoch + timedelta(days=float(data_str))
+                return dt.strftime('%d/%m/%Y')
+            except:
+                pass
+        
+        # Se é formato ISO (2025-11-03 ou 2025-11-03T00:00:00)
+        if '-' in data_str:
+            try:
+                dt = datetime.strptime(data_str.split('T')[0], '%Y-%m-%d')
+                return dt.strftime('%d/%m/%Y')
+            except:
+                pass
+        
+        # Se já está no formato correto dd/mm/yyyy
+        if '/' in data_str:
+            return data_str
+    
+    return str(data_value)
 
 def normalize_os_number(value):
     """
@@ -372,13 +421,8 @@ def gerar_pdf_prestador(lote_data):
     for item in os_list:
         data_exec = item.get('data_execucao')
         
-        # Formatar data
-        if hasattr(data_exec, 'strftime'):
-            data_exec_str = data_exec.strftime('%d/%m/%Y')
-        elif isinstance(data_exec, str):
-            data_exec_str = data_exec
-        else:
-            data_exec_str = str(data_exec)
+        # Usar função de conversão de data do Excel
+        data_exec_str = converter_data_excel(data_exec)
         
         items_fmt.append({
             "OS": item.get('o_s', item.get('OS', '')),
@@ -846,9 +890,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 # Preparar dados para o template
                 items_fmt = []
                 for os_item in os_list:
-                    data_exec = os_item.get('data_execucao', '')
-                    if hasattr(data_exec, 'strftime'):
-                        data_exec = data_exec.strftime('%d/%m/%Y')
+                    data_exec = converter_data_excel(os_item.get('data_execucao', ''))
                     
                     items_fmt.append({
                         "OS": os_item.get('o_s', ''),
@@ -966,9 +1008,7 @@ def enviar_relatorio(request: EnvioRelatorioRequest):
                 percentual_desmontagem = float(envio.get('percentual_desmontagem', 0.05))
                 
                 for montagem in montagens:
-                    data_montagem = montagem.get('data_montagem', '')
-                    if hasattr(data_montagem, 'strftime'):
-                        data_montagem = data_montagem.strftime('%d/%m/%Y')
+                    data_montagem = converter_data_excel(montagem.get('data_montagem', ''))
                     
                     valor_venda = float(montagem.get('valor_venda', 0))
                     tipo_servico = montagem.get('tipo_servico', 'MONTAGEM')
@@ -1876,7 +1916,7 @@ def enviar_lote_relatorios(request: dict):
                                 "cliente": item.get("cliente", ""),
                                 "localidade": item.get("localidade", ""),
                                 "modalidade": item.get("modalidade", ""),
-                                "data_execucao": item.get("data_execucao", ""),
+                                "data_execucao": converter_data_excel(item.get("data_execucao", "")),
                                 "valor_custo_prestador": float(item.get('valor_custo_prestador', item.get('valor', 0))),
                                 "valor_extra": float(item.get('valor_extra', 0)),
                                 "motivo_extra": item.get("motivo_extra", "-"),
@@ -1943,16 +1983,14 @@ def enviar_lote_relatorios(request: dict):
                     # Preparar dados para o template
                     items_fmt = []
                     for item in itens:
-                        data_exec = item.get('data_execucao', '')
-                        if hasattr(data_exec, 'strftime'):
-                            data_exec = data_exec.strftime('%d/%m/%Y')
+                        data_exec = converter_data_excel(item.get('data_execucao', ''))
                         
                         items_fmt.append({
                             "OS": item.get('o_s', ''),
                             "Cliente": item.get('cliente', '-'),
                             "Localidade": item.get('localidade', '-'),
                             "Modalidade": item.get('modalidade', ''),
-                            "Data_execucao": str(data_exec),
+                            "Data_execucao": data_exec,
                             "Valor": f"{float(item.get('valor_custo_prestador', item.get('valor', 0))):.2f}",
                             "Valor_extra": f"{float(item.get('valor_extra', 0)):.2f}",
                             "Motivo_valor_extra": item.get('motivo_extra', '-'),

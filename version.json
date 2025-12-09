@@ -1,75 +1,75 @@
 {
-  "version": "1.1.2191",
-  "lastUpdate": "2025-12-06",
+  "version": "1.1.2925",
+  "lastUpdate": "2025-12-09",
   "changelog": [
     {
-      "version": "1.1.2191",
-      "date": "2025-12-06",
+      "version": "1.1.2925",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2190",
-      "date": "2025-12-06",
+      "version": "1.1.2924",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2189",
-      "date": "2025-12-06",
+      "version": "1.1.2923",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2188",
-      "date": "2025-12-06",
+      "version": "1.1.2922",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2187",
-      "date": "2025-12-06",
+      "version": "1.1.2921",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2186",
-      "date": "2025-12-06",
+      "version": "1.1.2920",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2185",
-      "date": "2025-12-06",
+      "version": "1.1.2919",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2184",
-      "date": "2025-12-06",
+      "version": "1.1.2918",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2183",
-      "date": "2025-12-06",
+      "version": "1.1.2917",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     },
     {
-      "version": "1.1.2182",
-      "date": "2025-12-06",
+      "version": "1.1.2916",
+      "date": "2025-12-09",
       "changes": [
-        "Update label to 'Empresa montadora' in report\n\nChanged the label 'Montador' to 'Empresa montadora' in both the HTML template and PDF generator to clarify the entity being referenced in payment reports."
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
       ]
     }
   ]
