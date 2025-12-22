@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, MessageSquare, Settings, Phone, Send, Users, Wrench, List } from "lucide-react";
+import { RefreshCw, MessageSquare, Settings, Phone, Send, Users, Wrench, List, QrCode, Loader2 } from "lucide-react";
 import { whatsappService } from "@/services/whatsapp.service";
 import { prestadoresService } from "@/services/prestadores.service";
 import { montadoresService } from "@/services/montadores.service";
@@ -28,6 +28,50 @@ export default function WhatsApp() {
   const [montadores, setMontadores] = useState<any[]>([]);
   const [prestadorSelecionado, setPrestadorSelecionado] = useState("");
   const [montadorSelecionado, setMontadorSelecionado] = useState("");
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-refresh enquanto aguarda QR Code ou durante inicialização
+  useEffect(() => {
+    // Busca status inicial
+    atualizarStatusSilencioso();
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Configura auto-refresh baseado no status
+  useEffect(() => {
+    // Limpa intervalo anterior
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+
+    // Se está aguardando QR Code ou inicializando, faz refresh a cada 2 segundos
+    if (status?.server_running && (status?.hasQrCode || status?.status === 'initializing' || status?.status === 'qr_ready')) {
+      refreshIntervalRef.current = setInterval(() => {
+        atualizarStatusSilencioso();
+      }, 2000);
+    }
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [status?.server_running, status?.hasQrCode, status?.status]);
+
+  const atualizarStatusSilencioso = async () => {
+    try {
+      const data = await whatsappService.getStatus();
+      setStatus(data);
+    } catch (error) {
+      // Silencioso - não mostra erro
+    }
+  };
 
   const atualizarStatus = async () => {
     setLoading(true);
@@ -303,19 +347,45 @@ export default function WhatsApp() {
               </div>
 
               {/* QR Code */}
-              {status?.hasQrCode && status?.qrCode && (
+              {status?.server_running && status?.hasQrCode && (
                 <div className="flex flex-col items-center space-y-4">
                   <Separator />
-                  <h3 className="text-lg font-semibold">📱 Escaneie o QR Code</h3>
-                  <div className="bg-white p-4 rounded-lg shadow-lg">
-                    <img src={status.qrCode} alt="QR Code WhatsApp" className="w-64 h-64" />
+                  <div className="flex items-center gap-2">
+                    <QrCode className="h-5 w-5 text-green-600" />
+                    <h3 className="text-lg font-semibold">Escaneie o QR Code</h3>
                   </div>
-                  <div className="text-sm text-muted-foreground max-w-md text-center">
+                  
+                  {status?.qrCode ? (
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-green-500">
+                      <img src={status.qrCode} alt="QR Code WhatsApp" className="w-72 h-72" />
+                    </div>
+                  ) : (
+                    <div className="bg-white p-6 rounded-xl shadow-lg border flex items-center justify-center w-72 h-72">
+                      <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                    </div>
+                  )}
+                  
+                  <div className="text-sm text-muted-foreground max-w-md text-center space-y-1">
+                    <p className="font-medium text-foreground">Como conectar:</p>
                     <p>1. Abra o WhatsApp no celular</p>
-                    <p>2. Vá em Menu → Aparelhos conectados</p>
-                    <p>3. Toque em "Conectar um aparelho"</p>
+                    <p>2. Vá em <strong>Menu → Aparelhos conectados</strong></p>
+                    <p>3. Toque em <strong>"Conectar um aparelho"</strong></p>
                     <p>4. Aponte a câmera para este código</p>
                   </div>
+                  
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Aguardando leitura do QR Code...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Estado de inicialização */}
+              {status?.server_running && status?.status === 'initializing' && !status?.hasQrCode && (
+                <div className="flex flex-col items-center space-y-4 py-8">
+                  <Loader2 className="h-12 w-12 animate-spin text-green-500" />
+                  <p className="text-muted-foreground">Iniciando WhatsApp...</p>
+                  <p className="text-xs text-muted-foreground">O QR Code aparecerá em instantes</p>
                 </div>
               )}
 

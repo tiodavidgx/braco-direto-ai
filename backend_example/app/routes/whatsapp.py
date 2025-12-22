@@ -73,6 +73,17 @@ def get_status():
         response = requests.get(f"{WHATSAPP_BASE_URL}/status", timeout=2)
         data = response.json()
         data['server_running'] = True
+        
+        # Se tem QR Code disponível, busca a imagem
+        if data.get('hasQrCode'):
+            try:
+                qr_response = requests.get(f"{WHATSAPP_BASE_URL}/qr-image", timeout=2)
+                qr_data = qr_response.json()
+                if qr_data.get('success') and qr_data.get('qrCode'):
+                    data['qrCode'] = qr_data['qrCode']
+            except:
+                pass
+        
         return data
     except:
         return {
