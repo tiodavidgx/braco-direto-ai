@@ -23,8 +23,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8080",  # Frontend em desenvolvimento
+        "http://localhost:8080",  # Frontend em desenvolvimento (legado)
         "http://localhost:5173",  # Vite alternativo
+        "http://localhost:3080",  # Frontend nova porta
         # Adicionar URL de produção aqui
     ],
     allow_credentials=True,

@@ -27,6 +27,8 @@ class MontadorBase(BaseModel):
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: int = 10
     emails_adicionais: Optional[str] = None
+    filial: Optional[str] = None
+    localidade: Optional[str] = None
 
 class MontadorCreate(MontadorBase):
     pass
@@ -44,6 +46,8 @@ class MontadorUpdate(BaseModel):
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: Optional[int] = None
     emails_adicionais: Optional[str] = None
+    filial: Optional[str] = None
+    localidade: Optional[str] = None
 
 @router.get("")
 def listar_montadores(
@@ -98,8 +102,8 @@ def criar_montador(montador: MontadorCreate):
                 (nome, identificador, email, telefone, percentual_montagem, 
                  percentual_assistencia, percentual_desmontagem,
                  auxilio_semanal, ativo, fornecedor_id, regra_envio, dias_envio,
-                 tempo_vencimento_dias, emails_adicionais)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 tempo_vencimento_dias, emails_adicionais, filial, localidade)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -116,7 +120,9 @@ def criar_montador(montador: MontadorCreate):
                     montador.regra_envio,
                     montador.dias_envio,
                     montador.tempo_vencimento_dias,
-                    montador.emails_adicionais
+                    montador.emails_adicionais,
+                    montador.filial,
+                    montador.localidade
                 )
             )
             montador_id = cur.fetchone()[0]

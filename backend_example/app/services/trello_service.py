@@ -236,9 +236,10 @@ class TrelloIntegration:
                     notification_manager.send_notification(
                         tipo="info",
                         titulo="🔗 Integrado no Trello",
-                        mensagem=f"{tipo_entidade} {nome_entidade} - Lote #{lote_id}",
+                        mensagem=f"{tipo_entidade} {nome_entidade} - Lote #{lote_id if lote_id else envio_montagem_id}",
                         dados={
                             "lote_id": lote_id,
+                            "envio_montagem_id": envio_montagem_id,
                             "tipo": tipo_entidade.lower(),
                             "nome": nome_entidade,
                             "card_url": card_url,
@@ -252,6 +253,59 @@ class TrelloIntegration:
                 print(f"⚠️  Erro ao enviar notificação Trello: {e}")
                 import traceback
                 traceback.print_exc()
+            
+            # Enviar notificação WhatsApp para integração Trello
+            try:
+                from app.utils.whatsapp_automation import enviar_notificacao_whatsapp
+                
+                nome_entidade = prestador_nome if prestador_nome else montador_nome
+                
+                if prestador_nome:
+                    # Buscar prestador_id do lote
+                    with get_db_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute("SELECT prestador_id FROM lotes_servico WHERE id = %s", (lote_id,))
+                        result = cur.fetchone()
+                        destinatario_id = result[0] if result else None
+                    
+                    if destinatario_id:
+                        enviar_notificacao_whatsapp(
+                            evento='trello_card_criado_prestador',
+                            destinatario_id=destinatario_id,
+                            tipo='prestador',
+                            variaveis={
+                                'nome_prestador': prestador_nome,
+                                'lote_id': str(lote_id),
+                                'card_url': card_url,
+                                'valor': f"R$ {valor_lote:,.2f}" if valor_lote else "N/A",
+                                'data_integracao': datetime.now().strftime('%d/%m/%Y %H:%M')
+                            }
+                        )
+                        print(f"   📱 WhatsApp Trello enviado para prestador")
+                else:
+                    # Buscar montador_id do envio
+                    with get_db_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute("SELECT montador_id FROM envios_montagem WHERE id = %s", (envio_montagem_id,))
+                        result = cur.fetchone()
+                        destinatario_id = result[0] if result else None
+                    
+                    if destinatario_id:
+                        enviar_notificacao_whatsapp(
+                            evento='trello_card_criado_montador',
+                            destinatario_id=destinatario_id,
+                            tipo='montador',
+                            variaveis={
+                                'nome_montador': montador_nome,
+                                'envio_id': str(envio_montagem_id),
+                                'card_url': card_url,
+                                'valor': f"R$ {valor_lote:,.2f}" if valor_lote else "N/A",
+                                'data_integracao': datetime.now().strftime('%d/%m/%Y %H:%M')
+                            }
+                        )
+                        print(f"   📱 WhatsApp Trello enviado para montador")
+            except Exception as e:
+                print(f"⚠️  Erro ao enviar WhatsApp Trello: {e}")
             
             # Anexa arquivos reais
             if arquivos_para_anexar:

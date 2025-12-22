@@ -43,6 +43,8 @@ export default function Prestadores() {
   const [formRegraEnvio, setFormRegraEnvio] = useState("Nenhuma");
   const [formDiasEnvio, setFormDiasEnvio] = useState("");
   const [formTempoVencimento, setFormTempoVencimento] = useState("10");
+  const [formFilial, setFormFilial] = useState("");
+  const [formLocalidade, setFormLocalidade] = useState("");
 
   useEffect(() => {
     carregarBlacklist();
@@ -135,6 +137,8 @@ export default function Prestadores() {
     setFormRegraEnvio(prestador.regra_envio || "Nenhuma");
     setFormDiasEnvio(prestador.dias_envio || "");
     setFormTempoVencimento(prestador.tempo_vencimento_dias?.toString() || "10");
+    setFormFilial(prestador.filial || "");
+    setFormLocalidade(prestador.localidade || "");
     setEditDialogOpen(true);
   };
 
@@ -147,6 +151,8 @@ export default function Prestadores() {
     setFormRegraEnvio("Nenhuma");
     setFormDiasEnvio("");
     setFormTempoVencimento("10");
+    setFormFilial("");
+    setFormLocalidade("");
     setPrestadorEditando(null);
   };
 
@@ -166,6 +172,8 @@ export default function Prestadores() {
         dias_envio: formDiasEnvio,
         emails_adicionais: formEmailsAdicionais || undefined,
         tempo_vencimento_dias: parseInt(formTempoVencimento),
+        filial: formFilial || undefined,
+        localidade: formLocalidade || undefined,
       });
 
       toast.success("Prestador adicionado com sucesso!");
@@ -194,6 +202,8 @@ export default function Prestadores() {
         dias_envio: formDiasEnvio,
         emails_adicionais: formEmailsAdicionais || undefined,
         tempo_vencimento_dias: parseInt(formTempoVencimento),
+        filial: formFilial || undefined,
+        localidade: formLocalidade || undefined,
       });
 
       toast.success("Prestador atualizado com sucesso!");
@@ -285,6 +295,28 @@ export default function Prestadores() {
                   onChange={(e) => setFormFornecedorId(e.target.value)}
                   placeholder="FOR123"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="filial">Filial</Label>
+                  <Input
+                    id="filial"
+                    value={formFilial}
+                    onChange={(e) => setFormFilial(e.target.value)}
+                    placeholder="Ex: Filial SP"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="localidade">Localidade</Label>
+                  <Input
+                    id="localidade"
+                    value={formLocalidade}
+                    onChange={(e) => setFormLocalidade(e.target.value)}
+                    placeholder="Ex: São Paulo"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -518,6 +550,28 @@ export default function Prestadores() {
                     onChange={(e) => setFormFornecedorId(e.target.value)}
                     placeholder="FOR123"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-filial">Filial</Label>
+                    <Input
+                      id="edit-filial"
+                      value={formFilial}
+                      onChange={(e) => setFormFilial(e.target.value)}
+                      placeholder="Ex: Filial SP"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-localidade">Localidade</Label>
+                    <Input
+                      id="edit-localidade"
+                      value={formLocalidade}
+                      onChange={(e) => setFormLocalidade(e.target.value)}
+                      placeholder="Ex: São Paulo"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

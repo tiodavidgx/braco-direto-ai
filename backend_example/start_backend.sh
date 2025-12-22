@@ -21,4 +21,4 @@ elif [ -d "../venv" ]; then
 fi
 
 # Iniciar o backend usando o Python do ambiente virtual
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001

@@ -68,12 +68,13 @@ class WhatsAppClient:
     def format_number(self, number: str) -> str:
         """
         Formata número de telefone para o padrão WhatsApp
+        Remove o 9º dígito de celulares brasileiros para compatibilidade
         
         Args:
             number: Número de telefone (com ou sem código do país)
             
         Returns:
-            Número formatado (ex: 5511999999999)
+            Número formatado (ex: 5562991234567 -> 556291234567)
         """
         # Remove caracteres não numéricos
         number = ''.join(filter(str.isdigit, number))
@@ -81,6 +82,19 @@ class WhatsAppClient:
         # Se não tem código do país, adiciona 55 (Brasil)
         if len(number) == 11 or len(number) == 10:
             number = f"55{number}"
+        
+        # Remover 9º dígito para números brasileiros
+        # Formato: 55 + DDD (2 dígitos) + 9 + número (8 dígitos) = 13 dígitos
+        # Resultado desejado: 55 + DDD (2 dígitos) + número (8 dígitos) = 12 dígitos
+        if len(number) == 13 and number.startswith('55'):
+            ddd = number[2:4]
+            resto = number[4:]  # 9 + 8 dígitos
+            
+            # Se começa com 9 (celular), remove o 9
+            if resto.startswith('9') and len(resto) == 9:
+                numero_sem_9 = resto[1:]  # Remove o primeiro dígito (9)
+                number = f"55{ddd}{numero_sem_9}"
+                print(f"📞 WhatsApp Client - Telefone formatado: {ddd}9{numero_sem_9} -> {ddd}{numero_sem_9}")
         
         return number
     

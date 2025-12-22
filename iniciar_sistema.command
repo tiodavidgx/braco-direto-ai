@@ -21,7 +21,7 @@ osascript -e "tell application \"Terminal\" to do script \"cd '$PROJECT_DIR' && 
 echo "⏳ Aguardando serviços iniciarem..."
 sleep 5
 echo "🌐 Abrindo navegador..."
-open "http://localhost:5173"
+open "http://localhost:3080"
 
 # Fechar esta janela do terminal (opcional, remova se quiser ver logs deste script)
 # osascript -e 'tell application "Terminal" to close first window' & exit

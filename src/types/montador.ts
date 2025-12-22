@@ -20,6 +20,8 @@ export interface Montador {
   dias_envio?: string;
   emails_adicionais?: string;
   tempo_vencimento_dias: number;
+  filial?: string;
+  localidade?: string;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +41,8 @@ export interface MontadorCreate {
   dias_envio?: string;
   emails_adicionais?: string;
   tempo_vencimento_dias?: number;
+  filial?: string;
+  localidade?: string;
 }
 
 export interface MontadorUpdate extends Partial<MontadorCreate> {}

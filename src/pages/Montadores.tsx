@@ -47,6 +47,8 @@ export default function Montadores() {
   const [formRegraEnvio, setFormRegraEnvio] = useState("Nenhuma");
   const [formDiasEnvio, setFormDiasEnvio] = useState("");
   const [formTempoVencimento, setFormTempoVencimento] = useState("10");
+  const [formFilial, setFormFilial] = useState("");
+  const [formLocalidade, setFormLocalidade] = useState("");
 
   useEffect(() => {
     carregarBlacklist();
@@ -149,6 +151,8 @@ export default function Montadores() {
         dias_envio: formDiasEnvio,
         emails_adicionais: formEmailsAdicionais || null,
         tempo_vencimento_dias: parseInt(formTempoVencimento),
+        filial: formFilial || undefined,
+        localidade: formLocalidade || undefined,
       });
 
       toast.success("Montador adicionado com sucesso!");
@@ -166,6 +170,8 @@ export default function Montadores() {
       setFormRegraEnvio("Nenhuma");
       setFormDiasEnvio("");
       setFormTempoVencimento("10");
+      setFormFilial("");
+      setFormLocalidade("");
       // Recarregar lista
       carregarMontadores();
     } catch (error: any) {
@@ -188,6 +194,8 @@ export default function Montadores() {
     setFormRegraEnvio(montador.regra_envio || "Nenhuma");
     setFormDiasEnvio(montador.dias_envio || "");
     setFormTempoVencimento(montador.tempo_vencimento_dias?.toString() || "10");
+    setFormFilial(montador.filial || "");
+    setFormLocalidade(montador.localidade || "");
     setEditDialogOpen(true);
   };
 
@@ -204,6 +212,8 @@ export default function Montadores() {
     setFormRegraEnvio("Nenhuma");
     setFormDiasEnvio("");
     setFormTempoVencimento("10");
+    setFormFilial("");
+    setFormLocalidade("");
     setMontadorEditando(null);
   };
 
@@ -226,6 +236,8 @@ export default function Montadores() {
         regra_envio: formRegraEnvio,
         dias_envio: formDiasEnvio,
         tempo_vencimento_dias: parseInt(formTempoVencimento),
+        filial: formFilial || undefined,
+        localidade: formLocalidade || undefined,
       });
 
       toast.success("Montador atualizado com sucesso!");
@@ -295,6 +307,28 @@ export default function Montadores() {
                   onChange={(e) => setFormFornecedorId(e.target.value)}
                   placeholder="FOR123"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="filial">Filial</Label>
+                  <Input
+                    id="filial"
+                    value={formFilial}
+                    onChange={(e) => setFormFilial(e.target.value)}
+                    placeholder="Ex: Filial SP"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="localidade">Localidade</Label>
+                  <Input
+                    id="localidade"
+                    value={formLocalidade}
+                    onChange={(e) => setFormLocalidade(e.target.value)}
+                    placeholder="Ex: São Paulo"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-2">
@@ -614,6 +648,28 @@ export default function Montadores() {
                     onChange={(e) => setFormFornecedorId(e.target.value)}
                     placeholder="FOR123"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-filial">Filial</Label>
+                    <Input
+                      id="edit-filial"
+                      value={formFilial}
+                      onChange={(e) => setFormFilial(e.target.value)}
+                      placeholder="Ex: Filial SP"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-localidade">Localidade</Label>
+                    <Input
+                      id="edit-localidade"
+                      value={formLocalidade}
+                      onChange={(e) => setFormLocalidade(e.target.value)}
+                      placeholder="Ex: São Paulo"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">

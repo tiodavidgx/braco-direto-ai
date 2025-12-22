@@ -12,6 +12,31 @@ class WhatsAppClientSimple:
     def __init__(self, base_url="http://localhost:3000"):
         self.base_url = base_url
     
+    def format_number(self, number: str) -> str:
+        """
+        Formata número de telefone para o padrão WhatsApp
+        Remove o 9º dígito de celulares brasileiros para compatibilidade
+        """
+        # Remove caracteres não numéricos
+        number = ''.join(filter(str.isdigit, number))
+        
+        # Se não tem código do país, adiciona 55 (Brasil)
+        if len(number) == 11 or len(number) == 10:
+            number = f"55{number}"
+        
+        # Remover 9º dígito para números brasileiros
+        # Formato: 55 + DDD (2 dígitos) + 9 + número (8 dígitos) = 13 dígitos
+        if len(number) == 13 and number.startswith('55'):
+            ddd = number[2:4]
+            resto = number[4:]  # 9 + 8 dígitos
+            
+            # Se começa com 9 (celular), remove o 9
+            if resto.startswith('9') and len(resto) == 9:
+                numero_sem_9 = resto[1:]
+                number = f"55{ddd}{numero_sem_9}"
+        
+        return number
+    
     def get_status(self):
         try:
             response = requests.get(f"{self.base_url}/status", timeout=2)
@@ -28,9 +53,10 @@ class WhatsAppClientSimple:
     
     def send_message(self, number, message):
         try:
+            formatted_number = self.format_number(number)
             response = requests.post(
                 f"{self.base_url}/send",
-                json={"number": number, "message": message},
+                json={"number": formatted_number, "message": message},
                 timeout=30
             )
             return response.json()
@@ -39,9 +65,10 @@ class WhatsAppClientSimple:
     
     def send_bulk_messages(self, numbers, message, delay=3000):
         try:
+            formatted_numbers = [self.format_number(n) for n in numbers]
             response = requests.post(
                 f"{self.base_url}/send-bulk",
-                json={"numbers": numbers, "message": message, "delay": delay},
+                json={"numbers": formatted_numbers, "message": message, "delay": delay},
                 timeout=300
             )
             return response.json()

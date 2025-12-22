@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 
-const WS_URL = 'ws://localhost:8000/api/v1/ws/notifications';
+const WS_URL = 'ws://localhost:8001/api/v1/ws/notifications';
 
 export interface NotificationData {
   tipo: 'success' | 'info' | 'warning' | 'error';

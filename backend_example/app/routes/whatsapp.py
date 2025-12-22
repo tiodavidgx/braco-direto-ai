@@ -5,6 +5,7 @@ import requests
 from datetime import datetime
 import psycopg2.extras
 from app.database import get_db_connection
+from app.utils.whatsapp_automation import formatar_telefone_whatsapp
 import subprocess
 import os
 import signal
@@ -256,9 +257,13 @@ def get_info():
 def send_message(request: SendMessageRequest):
     """Envia uma mensagem individual"""
     try:
+        # Aplicar formatação do telefone (remover 9º dígito)
+        telefone_formatado = formatar_telefone_whatsapp(request.number)
+        print(f"📞 WhatsApp Send - Telefone: {request.number} -> {telefone_formatado}")
+        
         response = requests.post(
             f"{WHATSAPP_BASE_URL}/send",
-            json={"number": request.number, "message": request.message},
+            json={"number": telefone_formatado, "message": request.message},
             timeout=30
         )
         return response.json()
@@ -270,10 +275,14 @@ def send_message(request: SendMessageRequest):
 def send_bulk(request: SendBulkRequest):
     """Envia mensagens em massa"""
     try:
+        # Aplicar formatação em todos os telefones (remover 9º dígito)
+        telefones_formatados = [formatar_telefone_whatsapp(n) for n in request.numbers]
+        print(f"📞 WhatsApp Bulk Send - {len(telefones_formatados)} telefones formatados")
+        
         response = requests.post(
             f"{WHATSAPP_BASE_URL}/send-bulk",
             json={
-                "numbers": request.numbers,
+                "numbers": telefones_formatados,
                 "message": request.message,
                 "delay": request.delay
             },

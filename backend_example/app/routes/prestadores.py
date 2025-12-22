@@ -21,6 +21,8 @@ class PrestadorBase(BaseModel):
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: int = 10
     emails_adicionais: Optional[str] = None
+    filial: Optional[str] = None
+    localidade: Optional[str] = None
 
 class PrestadorCreate(PrestadorBase):
     pass
@@ -34,6 +36,8 @@ class PrestadorUpdate(BaseModel):
     dias_envio: Optional[str] = None
     tempo_vencimento_dias: Optional[int] = None
     emails_adicionais: Optional[str] = None
+    filial: Optional[str] = None
+    localidade: Optional[str] = None
 
 @router.get("")
 def listar_prestadores(
@@ -106,8 +110,8 @@ def criar_prestador(prestador: PrestadorCreate):
                 """
                 INSERT INTO prestadores 
                 (nome, email, fornecedor_id, telefone, regra_envio, dias_envio, 
-                 tempo_vencimento_dias, emails_adicionais)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 tempo_vencimento_dias, emails_adicionais, filial, localidade)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -118,7 +122,9 @@ def criar_prestador(prestador: PrestadorCreate):
                     prestador.regra_envio,
                     prestador.dias_envio,
                     prestador.tempo_vencimento_dias,
-                    prestador.emails_adicionais
+                    prestador.emails_adicionais,
+                    prestador.filial,
+                    prestador.localidade
                 )
             )
             prestador_id = cur.fetchone()[0]

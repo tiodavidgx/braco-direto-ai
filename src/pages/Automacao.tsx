@@ -171,6 +171,9 @@ export default function Automacao() {
       "{{link}}",
       "{{numero_nf}}",
       "{{data_recebimento}}",
+      "{{lote_id}}",
+      "{{card_url}}",
+      "{{data_integracao}}",
     ],
     montador: [
       "{{nome_montador}}",
@@ -179,11 +182,50 @@ export default function Automacao() {
       "{{quantidade_os}}",
       "{{numero_nf}}",
       "{{data_recebimento}}",
+      "{{envio_id}}",
+      "{{card_url}}",
+      "{{data_integracao}}",
+    ],
+    envio_relatorio: [
+      "{{nome_prestador}}",
+      "{{nome_montador}}",
+      "{{periodo}}",
+      "{{valor}}",
+      "{{link}}",
+    ],
+    nf_recebida: [
+      "{{nome_prestador}}",
+      "{{nome_montador}}",
+      "{{numero_nf}}",
+      "{{data_recebimento}}",
+      "{{valor}}",
+      "{{periodo}}",
+    ],
+    trello_integracao: [
+      "{{nome_prestador}}",
+      "{{nome_montador}}",
+      "{{lote_id}}",
+      "{{envio_id}}",
+      "{{valor}}",
+      "{{card_url}}",
+      "{{data_integracao}}",
     ],
   };
 
   const templatesPrestador = templates.filter(t => t.tipo === "prestador");
   const templatesMontador = templates.filter(t => t.tipo === "montador");
+  const templatesEnvioRelatorio = templates.filter(t => t.tipo === "envio_relatorio");
+  const templatesNFRecebida = templates.filter(t => t.tipo === "nf_recebida");
+  const templatesTrello = templates.filter(t => t.tipo === "trello_integracao");
+
+  // Agrupar templates por tipo para exibição
+  const tiposTemplates = [
+    { key: 'prestador', label: 'Prestadores', templates: templatesPrestador },
+    { key: 'montador', label: 'Montadores', templates: templatesMontador },
+    { key: 'envio_relatorio', label: 'Envio de Relatório', templates: templatesEnvioRelatorio },
+    { key: 'nf_recebida', label: 'NF Recebida', templates: templatesNFRecebida },
+    { key: 'trello_integracao', label: 'Integração Trello', templates: templatesTrello },
+  ];
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -252,6 +294,9 @@ export default function Automacao() {
                           <SelectContent>
                             <SelectItem value="prestador">Prestador</SelectItem>
                             <SelectItem value="montador">Montador</SelectItem>
+                            <SelectItem value="envio_relatorio">Envio de Relatório</SelectItem>
+                            <SelectItem value="nf_recebida">NF Recebida</SelectItem>
+                            <SelectItem value="trello_integracao">Integração Trello</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -271,7 +316,7 @@ export default function Automacao() {
                     <div className="space-y-2">
                       <Label>Variáveis Disponíveis</Label>
                       <div className="bg-muted p-4 rounded-lg space-y-2">
-                        {variaveis[tipoTemplate as keyof typeof variaveis].map((v) => (
+                        {(variaveis[tipoTemplate as keyof typeof variaveis] || variaveis.prestador).map((v) => (
                           <code key={v} className="block bg-background p-2 rounded text-sm">
                             {v}
                           </code>
@@ -305,56 +350,35 @@ export default function Automacao() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {templatesPrestador.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold">Prestadores</h3>
-                      {templatesPrestador.map((t) => (
-                        <Card key={t.id}>
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">{t.nome}</CardTitle>
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline" onClick={() => abrirEdicao(t)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
+                  {tiposTemplates.map(({ key, label, templates: tipoTemplates }) => 
+                    tipoTemplates.length > 0 && (
+                      <div key={key} className="space-y-3">
+                        <h3 className="font-semibold">{label}</h3>
+                        {tipoTemplates.map((t) => (
+                          <Card key={t.id}>
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <CardTitle className="text-base">{t.nome}</CardTitle>
+                                  <Badge variant="outline" className="mt-1">{t.tipo}</Badge>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => abrirEdicao(t)}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
-                              {t.template.substring(0, 200)}
-                              {t.template.length > 200 && "..."}
-                            </code>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-
-                  {templatesMontador.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold">Montadores</h3>
-                      {templatesMontador.map((t) => (
-                        <Card key={t.id}>
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">{t.nome}</CardTitle>
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline" onClick={() => abrirEdicao(t)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
-                              {t.template.substring(0, 200)}
-                              {t.template.length > 200 && "..."}
-                            </code>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                            </CardHeader>
+                            <CardContent>
+                              <code className="text-xs bg-muted p-2 rounded block overflow-x-auto whitespace-pre-wrap">
+                                {t.template.substring(0, 200)}
+                                {t.template.length > 200 && "..."}
+                              </code>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )
                   )}
 
                   {templates.length === 0 && (
@@ -382,16 +406,25 @@ export default function Automacao() {
                     <div className="flex items-center justify-between">
                       <div>
                         <CardTitle className="text-base">
-                          {trigger.evento === 'envio_email_prestador' && '📧 Email Enviado - Prestador'}
+                          {trigger.evento === 'envio_email_prestador' && '📧 Relatório Enviado - Prestador'}
                           {trigger.evento === 'nf_recebida_prestador' && '📎 NF Recebida - Prestador'}
-                          {trigger.evento === 'envio_email_montador' && '📧 Email Enviado - Montador'}
+                          {trigger.evento === 'envio_email_montador' && '📧 Relatório Enviado - Montador'}
                           {trigger.evento === 'nf_recebida_montador' && '📎 NF Recebida - Montador'}
+                          {trigger.evento === 'trello_card_criado_prestador' && '🔗 Trello Integrado - Prestador'}
+                          {trigger.evento === 'trello_card_criado_montador' && '🔗 Trello Integrado - Montador'}
+                          {trigger.evento === 'pagamento_realizado_prestador' && '💰 Pagamento Realizado - Prestador'}
+                          {trigger.evento === 'pagamento_realizado_montador' && '💰 Pagamento Realizado - Montador'}
+                          {!['envio_email_prestador', 'nf_recebida_prestador', 'envio_email_montador', 'nf_recebida_montador', 'trello_card_criado_prestador', 'trello_card_criado_montador', 'pagamento_realizado_prestador', 'pagamento_realizado_montador'].includes(trigger.evento) && `🔔 ${trigger.evento}`}
                         </CardTitle>
                         <CardDescription className="text-sm">
-                          {trigger.evento === 'envio_email_prestador' && 'Quando um email é enviado ao prestador'}
+                          {trigger.evento === 'envio_email_prestador' && 'Quando o relatório de fechamento é enviado ao prestador'}
                           {trigger.evento === 'nf_recebida_prestador' && 'Quando o prestador anexa a nota fiscal'}
-                          {trigger.evento === 'envio_email_montador' && 'Quando um email é enviado ao montador'}
+                          {trigger.evento === 'envio_email_montador' && 'Quando o relatório de pagamento é enviado ao montador'}
                           {trigger.evento === 'nf_recebida_montador' && 'Quando o montador anexa a nota fiscal'}
+                          {trigger.evento === 'trello_card_criado_prestador' && 'Quando o card do Trello é criado para o prestador'}
+                          {trigger.evento === 'trello_card_criado_montador' && 'Quando o card do Trello é criado para o montador'}
+                          {trigger.evento === 'pagamento_realizado_prestador' && 'Quando o pagamento é confirmado para o prestador'}
+                          {trigger.evento === 'pagamento_realizado_montador' && 'Quando o pagamento é confirmado para o montador'}
                         </CardDescription>
                       </div>
                       <Switch 

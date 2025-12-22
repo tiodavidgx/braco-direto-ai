@@ -10,6 +10,65 @@ import psycopg2.extras
 WHATSAPP_BASE_URL = "http://localhost:3000"
 
 
+def formatar_telefone_whatsapp(telefone: str) -> str:
+    """
+    Formata o telefone para o padrão do WhatsApp.
+    
+    No Brasil, celulares têm 9 dígitos (com o nono dígito "9" na frente).
+    O WhatsApp pode funcionar com 8 dígitos (sem o nono dígito).
+    
+    Regras:
+    - Remove todos os caracteres não numéricos
+    - Se tiver DDD (2 dígitos) + 9 dígitos de celular, remove o nono dígito
+    - Formato final: DDD + 8 dígitos (ex: 62 99105608 -> 6291056081)
+    
+    Exemplos:
+    - "62 991056081" -> "6291056081"
+    - "(62) 99105-6081" -> "6291056081"
+    - "62991056081" -> "6291056081"
+    - "5562991056081" -> "5562991056081" (já tem código do país, mantém)
+    
+    Args:
+        telefone: Número de telefone em qualquer formato
+        
+    Returns:
+        Telefone formatado para WhatsApp
+    """
+    if not telefone:
+        return telefone
+    
+    # Remove todos os caracteres não numéricos
+    numeros = re.sub(r'\D', '', telefone)
+    
+    # Se já tem código do país (55), processa diferente
+    if numeros.startswith('55') and len(numeros) >= 12:
+        # 55 + DDD (2) + número (8 ou 9)
+        codigo_pais = numeros[:2]  # 55
+        ddd = numeros[2:4]  # DDD
+        numero = numeros[4:]  # resto
+        
+        # Se o número tem 9 dígitos e começa com 9, remove o nono dígito
+        if len(numero) == 9 and numero.startswith('9'):
+            numero = numero[1:]
+        
+        return f"{codigo_pais}{ddd}{numero}"
+    
+    # Sem código do país
+    if len(numeros) >= 10:
+        # DDD (2) + número (8 ou 9)
+        ddd = numeros[:2]
+        numero = numeros[2:]
+        
+        # Se o número tem 9 dígitos e começa com 9, remove o nono dígito
+        if len(numero) == 9 and numero.startswith('9'):
+            numero = numero[1:]
+        
+        return f"{ddd}{numero}"
+    
+    # Retorna o número limpo se não se encaixar nos padrões
+    return numeros
+
+
 def processar_template(template: str, variaveis: Dict[str, Any]) -> str:
     """
     Substitui variáveis no template
@@ -97,6 +156,11 @@ def enviar_notificacao_whatsapp(
         if not telefone:
             print(f"⚠️ {tipo.capitalize()} {nome} não tem telefone cadastrado")
             return None
+        
+        # Formatar telefone para WhatsApp (remover nono dígito se necessário)
+        telefone_original = telefone
+        telefone = formatar_telefone_whatsapp(telefone)
+        print(f"   📞 Telefone: {telefone_original} -> {telefone}")
         
         # Adicionar nome às variáveis
         if tipo == 'prestador':
@@ -316,10 +380,14 @@ def processar_fila_whatsapp(limite: int = 50) -> Dict[str, Any]:
         for notificacao in pendentes:
             try:
                 metadata = notificacao.get('metadata', {})
-                telefone = metadata.get('telefone')
+                telefone_original = metadata.get('telefone')
                 
-                if not telefone:
+                if not telefone_original:
                     continue
+                
+                # Aplicar formatação do telefone (remover 9º dígito)
+                telefone = formatar_telefone_whatsapp(telefone_original)
+                print(f"   📞 Fila - Telefone: {telefone_original} -> {telefone}")
                 
                 # Enviar mensagem
                 response = requests.post(
