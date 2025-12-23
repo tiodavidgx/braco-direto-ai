@@ -18,6 +18,9 @@ msal==1.34.0
 # Requisições HTTP
 requests==2.31.0
 
+# Retry logic para chamadas de API
+tenacity==8.2.3
+
 # Geração de PDFs
 reportlab==4.0.7
 xhtml2pdf==0.2.17

@@ -1,21 +1,58 @@
 """
 Cliente para consultar API externa de uploads de notas fiscais
 Baseado no sistema original: sistema_original/consulta_nf_client.py
+
+Inclui:
+- Retry automático com backoff exponencial usando tenacity
+- Logging estruturado
+- Tratamento robusto de erros
 """
 
 import requests
+import logging
 from typing import Tuple, Dict, Any, Optional
 from datetime import datetime
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+# Configurar logger
+logger = logging.getLogger('ConsultaNFClient')
 
 
 class ConsultaNFClient:
     """
     Cliente para consultar status de uploads na API externa (api.link.dev.br)
+    Com retry automático e logging estruturado
     """
     
     def __init__(self):
         self.base_url = "https://api.link.dev.br/dvprocessamento"
         self.api_key = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
+        self.timeout_consulta = 30
+        self.timeout_download = 120
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError)),
+        before_sleep=lambda retry_state: logger.warning(
+            f"Tentativa {retry_state.attempt_number} falhou, aguardando para retry..."
+        )
+    )
+    def _fazer_requisicao_api(self, url: str, payload: Dict, headers: Dict) -> requests.Response:
+        """Faz requisição à API com retry automático"""
+        return requests.post(url, json=payload, headers=headers, timeout=self.timeout_consulta, verify=False)
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError)),
+        before_sleep=lambda retry_state: logger.warning(
+            f"Download - Tentativa {retry_state.attempt_number} falhou, aguardando para retry..."
+        )
+    )
+    def _fazer_download(self, url: str, headers: Dict) -> requests.Response:
+        """Faz download com retry automático"""
+        return requests.get(url, headers=headers, timeout=self.timeout_download, stream=True, verify=False)
     
     def consultar_e_processar(self, upload_hash: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
@@ -46,17 +83,15 @@ class ConsultaNFClient:
                 "hash": upload_hash
             }
             
-            # Log da requisição para debug
-            print(f"[DEBUG ConsultaNFClient] URL: {url}")
-            print(f"[DEBUG ConsultaNFClient] Headers: {headers}")
-            print(f"[DEBUG ConsultaNFClient] Payload: {payload}")
+            # Log da requisição
+            logger.debug(f"Consultando API: {url}")
+            logger.debug(f"Payload: {payload}")
             
-            # POST request (não GET!)
-            response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+            # POST request com retry automático
+            response = self._fazer_requisicao_api(url, payload, headers)
             
-            # Log da resposta para debug
-            print(f"[DEBUG ConsultaNFClient] Status Code: {response.status_code}")
-            print(f"[DEBUG ConsultaNFClient] Response Text: {response.text[:500]}")
+            # Log da resposta
+            logger.debug(f"Status Code: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
@@ -151,7 +186,8 @@ class ConsultaNFClient:
                 "X-API-Key": self.api_key
             }
             
-            response = requests.get(url_download, headers=headers, timeout=120, stream=True, verify=False)
+            # GET request com retry automático
+            response = self._fazer_download(url_download, headers)
             
             if response.status_code == 200:
                 with open(caminho_destino, 'wb') as f:

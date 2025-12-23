@@ -18,11 +18,19 @@ router = APIRouter()
 # Configurações OAuth2 Microsoft (Device Flow - não precisa de Client Secret)
 CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "")
 TENANT_ID = os.getenv("MICROSOFT_TENANT_ID", "common")
+# Se TENANT_ID estiver vazio, usar "common" como padrão
+if not TENANT_ID or TENANT_ID.strip() == "":
+    TENANT_ID = "common"
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["Mail.Send", "User.Read"]
 
-# Inicializar PublicClientApplication
-pca = PublicClientApplication(client_id=CLIENT_ID, authority=AUTHORITY)
+# Inicializar PublicClientApplication (apenas se CLIENT_ID estiver configurado)
+pca = None
+if CLIENT_ID and CLIENT_ID.strip() != "":
+    try:
+        pca = PublicClientApplication(client_id=CLIENT_ID, authority=AUTHORITY)
+    except Exception as e:
+        print(f"Aviso: Não foi possível inicializar Microsoft Auth: {e}")
 
 # Modelos
 class AuthConfig(BaseModel):
@@ -97,6 +105,12 @@ def start_device_flow():
             detail="CLIENT_ID não configurado. Configure MICROSOFT_CLIENT_ID no .env"
         )
     
+    if not pca:
+        raise HTTPException(
+            status_code=500,
+            detail="Microsoft Auth não inicializado. Verifique as configurações."
+        )
+    
     try:
         # Iniciar device flow
         flow = pca.initiate_device_flow(scopes=SCOPES)
@@ -145,6 +159,12 @@ def poll_device_flow(request: TokenPollRequest):
         )
     
     flow = device_flows[device_code]
+    
+    if not pca:
+        raise HTTPException(
+            status_code=500,
+            detail="Microsoft Auth não inicializado"
+        )
     
     try:
         # Tentar adquirir token (sem bloquear, só verifica status)

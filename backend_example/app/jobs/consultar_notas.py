@@ -35,15 +35,21 @@ if not logger.hasHandlers():
 
 
 def get_lotes_upload_pendente() -> List[Dict[str, Any]]:
-    """Busca lotes de prestadores aguardando upload de nota fiscal"""
+    """Busca lotes de prestadores aguardando upload de nota fiscal.
+    
+    Separa entre sistema interno e API externa pela coluna 'fonte':
+    - fonte = 'interno' -> consultar tabela uploads_nf
+    - fonte = 'api_externa' ou NULL (legado) -> consultar API externa
+    """
     with get_db_connection() as conn:
         import psycopg2.extras
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Primeiro garantir que a coluna upload_hash existe
+        # Primeiro garantir que as colunas existem
         cur.execute("""
             ALTER TABLE lotes_servico 
-            ADD COLUMN IF NOT EXISTS upload_hash TEXT
+            ADD COLUMN IF NOT EXISTS upload_hash TEXT,
+            ADD COLUMN IF NOT EXISTS fonte VARCHAR(20)
         """)
         conn.commit()
         
@@ -59,7 +65,8 @@ def get_lotes_upload_pendente() -> List[Dict[str, Any]]:
                 l.id_controle,
                 l.status_api,
                 l.status_arquivo,
-                l.data_envio
+                l.data_envio,
+                COALESCE(l.fonte, 'api_externa') as fonte
             FROM lotes_servico l
             WHERE l.link_upload IS NOT NULL
             AND (l.upload_hash IS NOT NULL OR l.id_controle IS NOT NULL)
@@ -71,15 +78,21 @@ def get_lotes_upload_pendente() -> List[Dict[str, Any]]:
 
 
 def get_envios_montagem_upload_pendente() -> List[Dict[str, Any]]:
-    """Busca envios de montadores aguardando upload de nota fiscal"""
+    """Busca envios de montadores aguardando upload de nota fiscal.
+    
+    Separa entre sistema interno e API externa pela coluna 'fonte':
+    - fonte = 'interno' -> consultar tabela uploads_nf
+    - fonte = 'api_externa' ou NULL (legado) -> consultar API externa
+    """
     with get_db_connection() as conn:
         import psycopg2.extras
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Primeiro garantir que a coluna upload_hash existe
+        # Primeiro garantir que as colunas existem
         cur.execute("""
             ALTER TABLE envios_montagem 
-            ADD COLUMN IF NOT EXISTS upload_hash TEXT
+            ADD COLUMN IF NOT EXISTS upload_hash TEXT,
+            ADD COLUMN IF NOT EXISTS fonte VARCHAR(20)
         """)
         conn.commit()
         
@@ -94,7 +107,8 @@ def get_envios_montagem_upload_pendente() -> List[Dict[str, Any]]:
                 e.upload_hash,
                 e.id_controle,
                 e.status_api,
-                e.data_envio
+                e.data_envio,
+                COALESCE(e.fonte, 'api_externa') as fonte
             FROM envios_montagem e
             WHERE e.link_upload IS NOT NULL
             AND (e.upload_hash IS NOT NULL OR e.id_controle IS NOT NULL)
@@ -195,6 +209,136 @@ def atualizar_status_api(lote_id: int, status: int):
         """, (status, lote_id))
         
         conn.commit()
+
+
+def consultar_upload_interno(lote_id: int = None, envio_montagem_id: int = None, upload_hash: str = None):
+    """
+    Consulta status de upload no sistema INTERNO.
+    
+    Returns:
+        Tuple[bool, Dict, str]: (sucesso, dados, erro)
+        - dados contém: arquivos, estatisticas, status
+    """
+    with get_db_connection() as conn:
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Buscar upload pelo hash ou IDs
+        query = """
+            SELECT 
+                u.id,
+                u.hash,
+                u.tipo,
+                u.lote_id,
+                u.envio_montagem_id,
+                u.status,
+                u.data_criacao,
+                u.data_expiracao,
+                u.data_upload,
+                u.sistema
+            FROM uploads_nf u
+            WHERE u.sistema = 'interno'
+        """
+        params = []
+        
+        if upload_hash:
+            query += " AND u.hash = %s"
+            params.append(upload_hash)
+        elif lote_id:
+            query += " AND u.lote_id = %s"
+            params.append(lote_id)
+        elif envio_montagem_id:
+            query += " AND u.envio_montagem_id = %s"
+            params.append(envio_montagem_id)
+        else:
+            return False, None, "Nenhum identificador fornecido"
+        
+        cur.execute(query, params)
+        upload_info = cur.fetchone()
+        
+        if not upload_info:
+            return False, None, "Upload não encontrado no sistema interno"
+        
+        # Verificar se tem arquivos
+        cur.execute("""
+            SELECT 
+                id,
+                nome_original,
+                nome_salvo,
+                caminho,
+                extensao,
+                tamanho_bytes,
+                mime_type,
+                data_upload
+            FROM uploads_nf_arquivos
+            WHERE upload_id = %s
+            ORDER BY data_upload
+        """, (upload_info['id'],))
+        
+        arquivos_db = cur.fetchall()
+        
+        # Formatar resposta compatível com API externa
+        arquivos = []
+        total_tamanho = 0
+        
+        for arq in arquivos_db:
+            tamanho = arq['tamanho_bytes'] or 0
+            total_tamanho += tamanho
+            
+            arquivos.append({
+                'id': arq['id'],
+                'nome_original': arq['nome_original'],
+                'nome_salvo': arq['nome_salvo'],
+                'caminho': arq['caminho'],
+                'tamanho_bytes': tamanho,
+                'tamanho_formatado': formatar_tamanho(tamanho),
+                'link_download': arq['caminho'],  # Para interno, caminho é o próprio link
+                'tipo': arq['extensao'],
+                'data_upload': arq['data_upload'].strftime('%Y-%m-%d %H:%M:%S') if arq['data_upload'] else None
+            })
+        
+        # Status: 0=aguardando, 1=upload realizado, 2=expirado
+        status_map = {
+            0: 'Aguardando upload',
+            1: 'Upload realizado',
+            2: 'Link expirado'
+        }
+        
+        # Verificar se expirou
+        from datetime import datetime
+        expirou = upload_info['data_expiracao'] < datetime.now() if upload_info['data_expiracao'] else False
+        
+        dados = {
+            'nota': {
+                'id': upload_info['id'],
+                'hash': upload_info['hash'],
+                'status': upload_info['status'],
+                'status_descricao': status_map.get(upload_info['status'], 'Desconhecido'),
+                'link_valido': not expirou,
+                'dias_restantes': max(0, (upload_info['data_expiracao'] - datetime.now()).days) if upload_info['data_expiracao'] else 0,
+                'data_upload': upload_info['data_upload'].strftime('%Y-%m-%d %H:%M:%S') if upload_info['data_upload'] else None
+            },
+            'arquivos': arquivos,
+            'estatisticas': {
+                'total_arquivos': len(arquivos),
+                'total_tamanho': total_tamanho,
+                'total_tamanho_formatado': formatar_tamanho(total_tamanho)
+            }
+        }
+        
+        return True, dados, None
+
+
+def formatar_tamanho(bytes_size: int) -> str:
+    """Formata tamanho em bytes para formato legível"""
+    if bytes_size < 1024:
+        return f"{bytes_size} B"
+    elif bytes_size < 1024 * 1024:
+        return f"{bytes_size / 1024:.1f} KB"
+    elif bytes_size < 1024 * 1024 * 1024:
+        return f"{bytes_size / (1024 * 1024):.1f} MB"
+    else:
+        return f"{bytes_size / (1024 * 1024 * 1024):.1f} GB"
 
 
 def criar_notificacao(tipo: str, titulo: str, mensagem: str, lote_id: int, icone: str = '📋', prioridade: int = 0):
@@ -382,11 +526,17 @@ def processar_uploads_pendentes():
     try:
         # Buscar lotes de prestadores
         lotes = get_lotes_upload_pendente()
+        lotes_internos = [l for l in lotes if l.get('fonte') == 'interno']
+        lotes_externos = [l for l in lotes if l.get('fonte') != 'interno']
         logger.info(f"🔧 {len(lotes)} lote(s) de prestadores aguardando nota fiscal")
+        logger.info(f"   📦 {len(lotes_internos)} interno(s), {len(lotes_externos)} externo(s)")
         
         # Buscar envios de montadores
         envios_montagem = get_envios_montagem_upload_pendente()
+        envios_internos = [e for e in envios_montagem if e.get('fonte') == 'interno']
+        envios_externos = [e for e in envios_montagem if e.get('fonte') != 'interno']
         logger.info(f"🔧 {len(envios_montagem)} envio(s) de montadores aguardando nota fiscal")
+        logger.info(f"   📦 {len(envios_internos)} interno(s), {len(envios_externos)} externo(s)")
         
         total_pendentes = len(lotes) + len(envios_montagem)
         
@@ -400,7 +550,7 @@ def processar_uploads_pendentes():
                 'erros': 0
             }
         
-        # Criar cliente de consulta
+        # Criar cliente de consulta para API EXTERNA
         client = ConsultaNFClient()
         
         arquivos_encontrados = 0
@@ -417,11 +567,13 @@ def processar_uploads_pendentes():
             id_controle = lote.get('id_controle')
             prestador = lote['prestador_nome']
             periodo = lote['periodo']
+            fonte = lote.get('fonte', 'api_externa')  # Default: API externa (legado)
             
             logger.info(f"\n{'─'*60}")
             logger.info(f"📦 Lote #{lote_id}")
             logger.info(f"   👤 Prestador: {prestador}")
             logger.info(f"   📅 Período: {periodo}")
+            logger.info(f"   🔄 Sistema: {'INTERNO' if fonte == 'interno' else 'API EXTERNA'}")
             
             # Se não tem upload_hash, tentar usar id_controle como fallback
             if not upload_hash and id_controle:
@@ -436,9 +588,15 @@ def processar_uploads_pendentes():
             upload_hash = str(upload_hash)
             logger.info(f"   🔑 Hash: {upload_hash[:20]}...")
             
-            # Consultar status na API
+            # Consultar status baseado na fonte
             logger.info(f"   🔍 Consultando arquivos...")
-            sucesso, dados, erro = client.consultar_e_processar(upload_hash)
+            
+            if fonte == 'interno':
+                # Sistema INTERNO - consulta tabela uploads_nf
+                sucesso, dados, erro = consultar_upload_interno(lote_id=lote_id, upload_hash=upload_hash)
+            else:
+                # API EXTERNA (legado) - consulta api.link.dev.br
+                sucesso, dados, erro = client.consultar_e_processar(upload_hash)
             
             if not sucesso:
                 logger.info(f"   ❌ Erro ao consultar: {erro}")
@@ -477,7 +635,7 @@ def processar_uploads_pendentes():
                 salvar_arquivos_nf(lote_id, arquivos, stats)
                 logger.info(f"   ✅ Dados salvos no banco")
                 
-                # Baixar cada arquivo
+                # Baixar cada arquivo (ou copiar se interno)
                 pasta_destino = f"uploads/lote_{lote_id}"
                 os.makedirs(pasta_destino, exist_ok=True)
                 
@@ -490,18 +648,32 @@ def processar_uploads_pendentes():
                         downloads_realizados += 1
                         continue
                     
-                    logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
-                    
-                    sucesso_download, mensagem = client.baixar_arquivo(
-                        arquivo['link_download'],
-                        caminho_local
-                    )
-                    
-                    if sucesso_download:
-                        downloads_realizados += 1
+                    if fonte == 'interno':
+                        # Sistema interno: arquivo já está no servidor, copiar/mover
+                        import shutil
+                        caminho_origem = arquivo.get('caminho', arquivo.get('link_download', ''))
+                        
+                        if caminho_origem and os.path.exists(caminho_origem):
+                            logger.info(f"   📋 Copiando (interno): {nome_arquivo}")
+                            shutil.copy2(caminho_origem, caminho_local)
+                            downloads_realizados += 1
+                        else:
+                            logger.info(f"   ⚠️  Arquivo interno não encontrado: {caminho_origem}")
+                            erros += 1
                     else:
-                        logger.info(f"      ❌ {mensagem}")
-                        erros += 1
+                        # API externa: baixar via HTTP
+                        logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
+                        
+                        sucesso_download, mensagem = client.baixar_arquivo(
+                            arquivo['link_download'],
+                            caminho_local
+                        )
+                        
+                        if sucesso_download:
+                            downloads_realizados += 1
+                        else:
+                            logger.info(f"      ❌ {mensagem}")
+                            erros += 1
                 
                 # Atualizar status
                 atualizar_status_arquivo(lote_id, 2)
@@ -556,10 +728,11 @@ def processar_uploads_pendentes():
                             tipo='prestador',
                             variaveis={
                                 'nome_prestador': prestador,
+                                'lote_id': str(lote_id),
                                 'periodo': periodo,
                                 'valor': str(lote.get('valor_total', 0)),
                                 'numero_nf': arquivos[0]['nome_original'],
-                                'data_recebimento': datetime.now().strftime('%d/%m/%Y')
+                                'data_recebimento': datetime.now().strftime('%d/%m/%Y %H:%M')
                             }
                         )
                         logger.info(f"   📱 Notificação WhatsApp enviada")
@@ -616,11 +789,13 @@ def processar_uploads_pendentes():
             id_controle = envio.get('id_controle')
             montador = envio['montador_nome']
             periodo = envio['periodo']
+            fonte = envio.get('fonte', 'api_externa')  # Default: API externa (legado)
             
             logger.info(f"\n{'─'*60}")
             logger.info(f"🔧 Envio Montagem #{envio_id}")
             logger.info(f"   👤 Montador: {montador}")
             logger.info(f"   📅 Período: {periodo}")
+            logger.info(f"   🔄 Sistema: {'INTERNO' if fonte == 'interno' else 'API EXTERNA'}")
             
             # Se não tem upload_hash, tentar usar id_controle como fallback
             if not upload_hash and id_controle:
@@ -635,9 +810,15 @@ def processar_uploads_pendentes():
             upload_hash = str(upload_hash)
             logger.info(f"   🔑 Hash: {upload_hash[:20]}...")
             
-            # Consultar status na API
+            # Consultar status baseado na fonte
             logger.info(f"   🔍 Consultando arquivos...")
-            sucesso, dados, erro = client.consultar_e_processar(upload_hash)
+            
+            if fonte == 'interno':
+                # Sistema INTERNO - consulta tabela uploads_nf
+                sucesso, dados, erro = consultar_upload_interno(envio_montagem_id=envio_id, upload_hash=upload_hash)
+            else:
+                # API EXTERNA (legado) - consulta api.link.dev.br
+                sucesso, dados, erro = client.consultar_e_processar(upload_hash)
             
             if not sucesso:
                 logger.info(f"   ❌ Erro ao consultar: {erro}")
@@ -676,7 +857,7 @@ def processar_uploads_pendentes():
                 salvar_arquivos_nf_montagem(envio_id, arquivos, stats)
                 logger.info(f"   ✅ Dados salvos no banco")
                 
-                # Baixar cada arquivo
+                # Baixar cada arquivo (ou copiar se interno)
                 pasta_destino = f"uploads/montagem_{envio_id}"
                 os.makedirs(pasta_destino, exist_ok=True)
                 
@@ -689,18 +870,32 @@ def processar_uploads_pendentes():
                         downloads_realizados += 1
                         continue
                     
-                    logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
-                    
-                    sucesso_download, mensagem = client.baixar_arquivo(
-                        arquivo['link_download'],
-                        caminho_local
-                    )
-                    
-                    if sucesso_download:
-                        downloads_realizados += 1
+                    if fonte == 'interno':
+                        # Sistema interno: arquivo já está no servidor, copiar/mover
+                        import shutil
+                        caminho_origem = arquivo.get('caminho', arquivo.get('link_download', ''))
+                        
+                        if caminho_origem and os.path.exists(caminho_origem):
+                            logger.info(f"   📋 Copiando (interno): {nome_arquivo}")
+                            shutil.copy2(caminho_origem, caminho_local)
+                            downloads_realizados += 1
+                        else:
+                            logger.info(f"   ⚠️  Arquivo interno não encontrado: {caminho_origem}")
+                            erros += 1
                     else:
-                        logger.info(f"      ❌ {mensagem}")
-                        erros += 1
+                        # API externa: baixar via HTTP
+                        logger.info(f"   ⬇️  Baixando: {nome_arquivo} ({arquivo['tamanho_formatado']})")
+                        
+                        sucesso_download, mensagem = client.baixar_arquivo(
+                            arquivo['link_download'],
+                            caminho_local
+                        )
+                        
+                        if sucesso_download:
+                            downloads_realizados += 1
+                        else:
+                            logger.info(f"      ❌ {mensagem}")
+                            erros += 1
                 
                 # Atualizar status
                 atualizar_status_arquivo_montagem(envio_id, 2)
@@ -755,13 +950,14 @@ def processar_uploads_pendentes():
                             tipo='montador',
                             variaveis={
                                 'nome_montador': montador,
+                                'envio_id': str(envio_id),
                                 'periodo': periodo,
                                 'valor': str(envio.get('valor_total', 0)),
                                 'numero_nf': arquivos[0]['nome_original'],
-                                'data_recebimento': datetime.now().strftime('%d/%m/%Y')
+                                'data_recebimento': datetime.now().strftime('%d/%m/%Y %H:%M')
                             }
                         )
-                        logger.info(f"   � Notificação WhatsApp enviada")
+                        logger.info(f"   📱 Notificação WhatsApp enviada para montador #{envio_id}")
                     except Exception as e:
                         logger.warning(f"   ⚠️  Erro ao enviar WhatsApp: {e}")
                 

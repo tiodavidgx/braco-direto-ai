@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import { montadoresService } from "@/services/montadores.service";
 import { emailConfigService } from "@/services/email-config.service";
 import { Montador } from "@/types/montador";
+import { apiClient } from "@/services/api";
 
 interface MontadorEntry {
   identificador_do_montador: string;
@@ -134,8 +135,6 @@ Qualquer dúvida, estamos à disposição.`,
 
       setLoadingPreview(true);
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-        
         // Coletar boletins
         const boletins: string[] = dataParaEnvio
           .map(item => item.identificador_boletim_montagem)
@@ -147,22 +146,20 @@ Qualquer dúvida, estamos à disposição.`,
         }
 
         // Verificar blacklist
-        const blacklistResponse = await fetch(`${API_BASE_URL}/blacklist/boletins/check`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ numbers: boletins }),
-        });
-
-        const blacklisted = blacklistResponse.ok ? await blacklistResponse.json() : [];
+        let blacklisted: string[] = [];
+        try {
+          blacklisted = await apiClient.post<string[]>("/blacklist/boletins/check", { numbers: boletins });
+        } catch (e) {
+          console.error("Erro ao verificar blacklist:", e);
+        }
 
         // Verificar boletins já enviados
-        const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ boletins }),
-        });
-
-        const alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+        let alreadySent: string[] = [];
+        try {
+          alreadySent = await apiClient.post<string[]>("/relatorios/verificar-boletins-enviados", { boletins });
+        } catch (e) {
+          console.error("Erro ao verificar boletins enviados:", e);
+        }
 
         // Criar preview de status
         const preview = boletins.map(boletim => {
@@ -414,28 +411,15 @@ Qualquer dúvida, estamos à disposição.`,
 
     setSending(true);
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-
       console.log("📤 DEBUG - Enviando dados:", dataParaEnvio);
       console.log("📤 DEBUG - Primeiro item:", dataParaEnvio[0]);
 
-      const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "montador",
-          dados: dataParaEnvio,
-          emailConfig: emailConfig,
-          enviarWhatsApp: enviarWhatsApp,
-        }),
+      const result = await apiClient.post<any>("/relatorios/enviar-lote", {
+        tipo: "montador",
+        dados: dataParaEnvio,
+        emailConfig: emailConfig,
+        enviarWhatsApp: enviarWhatsApp,
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Erro ao enviar relatórios");
-      }
-
-      const result = await response.json();
 
       if (result.sucesso > 0) {
         toast.success(`✅ ${result.sucesso} envio(s) realizado(s) com sucesso!`);

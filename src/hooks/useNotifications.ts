@@ -1,6 +1,14 @@
 import { useEffect, useCallback, useRef } from 'react';
 
-const WS_URL = 'ws://localhost:8001/api/v1/ws/notifications';
+// WebSocket URL baseada no ambiente
+const getWsUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3080/api/v1';
+  // Converter http para ws
+  const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+  return `${wsUrl}/ws/notifications`;
+};
+
+const WS_URL = getWsUrl();
 
 export interface NotificationData {
   tipo: 'success' | 'info' | 'warning' | 'error';

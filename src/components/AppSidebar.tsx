@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +15,7 @@ import {
   Menu,
   ChevronLeft,
   Eye,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
   {
@@ -76,8 +78,10 @@ const menuItems = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentPath = location.pathname;
   const [version, setVersion] = useState("...");
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     // Carregar versão do sistema
@@ -86,6 +90,11 @@ export function AppSidebar() {
       .then(data => setVersion(data.version))
       .catch(() => setVersion("1.0.0"));
   }, []);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <Sidebar className="border-r border-border">
@@ -139,15 +148,26 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-border p-4">
         <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <span className="text-sm font-medium">AD</span>
+            <span className="text-sm font-medium">
+              {user?.full_name?.charAt(0) || user?.username?.charAt(0)?.toUpperCase() || 'U'}
+            </span>
           </div>
           <div className="flex flex-1 flex-col overflow-hidden">
-            <span className="truncate text-sm font-medium">Admin</span>
-            <span className="truncate text-xs text-muted-foreground">admin@novomundo.com</span>
+            <span className="truncate text-sm font-medium">{user?.full_name || user?.username || 'Usuário'}</span>
+            <span className="truncate text-xs text-muted-foreground">{user?.email || user?.role}</span>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-xs font-mono text-muted-foreground">v{version}</span>
-          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleLogout}
+            title="Sair"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-center mt-2">
+          <span className="text-xs font-mono text-muted-foreground">v{version}</span>
         </div>
       </SidebarFooter>
     </Sidebar>

@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { NotificationToast, Notification } from './NotificationToast';
 
-const WS_URL = 'ws://localhost:8001/api/v1/ws/notifications';
+// WebSocket URL baseada no ambiente
+const getWsUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3080/api/v1';
+  const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+  return `${wsUrl}/ws/notifications`;
+};
+
+const WS_URL = getWsUrl();
 
 export function NotificationContainer() {
   const [notifications, setNotifications] = useState<Notification[]>([]);

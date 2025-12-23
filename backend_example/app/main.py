@@ -8,7 +8,7 @@ Este é o arquivo principal que inicia a aplicação FastAPI.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
-from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications
+from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications, upload_nf, user_auth
 
 # Criar aplicação FastAPI
 app = FastAPI(
@@ -26,7 +26,11 @@ app.add_middleware(
         "http://localhost:8080",  # Frontend em desenvolvimento (legado)
         "http://localhost:5173",  # Vite alternativo
         "http://localhost:3080",  # Frontend nova porta
-        # Adicionar URL de produção aqui
+        "http://72.60.244.138",   # VPS IP direto
+        "http://suportedg.site",  # Produção HTTP
+        "https://suportedg.site", # Produção HTTPS
+        "http://www.suportedg.site",
+        "https://www.suportedg.site",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -76,10 +80,17 @@ def health_check():
     return {"status": "healthy"}
 
 # Registrar rotas (endpoints)
+# Rotas de autenticação de usuários (públicas)
+app.include_router(
+    user_auth.router,
+    prefix="/api/v1/user-auth",
+    tags=["Autenticação de Usuários"]
+)
+
 app.include_router(
     auth.router, 
     prefix="/api/v1/auth", 
-    tags=["Autenticação"]
+    tags=["Autenticação Microsoft"]
 )
 
 app.include_router(
@@ -152,6 +163,13 @@ app.include_router(
     notifications.router, 
     prefix="/api/v1", 
     tags=["Notificações"]
+)
+
+# Upload de NF - Rotas públicas (sem auth)
+app.include_router(
+    upload_nf.router, 
+    prefix="/api/v1/upload-nf", 
+    tags=["Upload NF"]
 )
 
 # Tratamento de erros globais

@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Configurações sensíveis (senhas/credenciais)
+scripts/.vps-config
+.env.local
+*.secret
+.credentials

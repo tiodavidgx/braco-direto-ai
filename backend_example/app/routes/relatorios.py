@@ -1406,7 +1406,21 @@ def enviar_lote_relatorios(request: dict):
                 lote_id = None
                 
                 if tipo == "prestador":
-                    periodo = itens[0].get("periodo", "N/A")
+                    periodo_raw = itens[0].get("periodo", "N/A")
+                    # Garantir formato MM/YYYY para API externa
+                    if periodo_raw and periodo_raw != "N/A":
+                        # Se vier só número (ex: "01"), adicionar ano atual
+                        if len(str(periodo_raw).strip()) <= 2:
+                            periodo = f"{str(periodo_raw).zfill(2)}/{datetime.now().year}"
+                        # Se já tiver formato correto, usar direto
+                        elif "/" in str(periodo_raw):
+                            periodo = str(periodo_raw)
+                        else:
+                            periodo = f"{datetime.now().month:02d}/{datetime.now().year}"
+                    else:
+                        periodo = f"{datetime.now().month:02d}/{datetime.now().year}"
+                    
+                    print(f"   📅 Período formatado: {periodo_raw} → {periodo}")
                     
                     # Calcular data de vencimento se tempo_vencimento_dias estiver definido
                     data_vencimento = None
@@ -1624,157 +1638,45 @@ def enviar_lote_relatorios(request: dict):
                 
                 conn.commit()
                 
-                # === ENVIAR PARA API PARA GERAR LINK ===
+                # === GERAR LINK DE UPLOAD (SISTEMA INTERNO) ===
                 if tipo == "montador":
                     try:
-                        import requests
-                        import time
-                        API_UPLOAD_URL = "http://api.link.dev.br/dvprocessamento/"
-                        API_UPLOAD_KEY = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
+                        from app.utils.link_upload_interno import gerar_link_upload
                         
-                        # ID do banco já começa em 100000+ (sequence configurada)
-                        # Usar diretamente sem offset adicional
-                        print(f"   🆔 ID para API: {lote_id}")
+                        print(f"   🆔 Gerando link interno para montador (ID: {lote_id})")
                         
-                        payload_api = {
-                            "nome": nome_destinatario,
-                            "email": email_destino,
-                            "periodo": periodo,  # Já está no formato MM/YYYY
-                            "valor_total": float(detalhes_json['total_geral']),
-                            "quantidade_os": len(itens),
-                            "data_envio": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            "lote_id": lote_id,
-                            "tipo": "montagem"
-                        }
-                        
-                        print(f"   📦 Payload: {payload_api}")
-                        
-                        headers_api = {
-                            "Content-Type": "application/json; charset=utf-8",
-                            "Accept": "application/json",
-                            "User-Agent": "NovoMundo-DisparadorEmail/1.0",
-                            "X-API-Key": API_UPLOAD_KEY
-                        }
-                        
-                        print(f"   📤 Enviando para API para gerar link (ID: {lote_id})...")
-                        response_api = requests.post(
-                            API_UPLOAD_URL,
-                            json=payload_api,
-                            headers=headers_api,
-                            timeout=10,
-                            verify=False
+                        resultado_link = gerar_link_upload(
+                            nome=nome_destinatario,
+                            email=email_destino,
+                            periodo=periodo,
+                            valor_total=float(detalhes_json['total_geral']),
+                            quantidade_os=len(itens),
+                            lote_id=lote_id,
+                            tipo='montador',
+                            usar_interno=False,  # 🔄 USA API EXTERNA (api.link.dev.br)
+                            validade_dias=30
                         )
                         
-                        if response_api.status_code in [200, 201]:
-                            resposta_api = response_api.json()
-                            if resposta_api.get('success'):
-                                id_controle_api = resposta_api.get('id_controle') or resposta_api.get('id')
-                                link_upload = resposta_api.get('link')
-                                upload_hash = resposta_api.get('hash')  # ✅ CRÍTICO: Pegar o hash da resposta
-                                validade_link = resposta_api.get('validade_link')  # ✅ Pegar validade do link
-                                
-                                print(f"   ✅ Enviado para API - ID Controle: {id_controle_api}")
-                                print(f"   ✅ Link gerado: {link_upload}")
-                                print(f"   ✅ Hash: {upload_hash}")
-                                print(f"   ✅ Validade: {validade_link}")
-                                
-                                # Salvar id_controle, link, hash e validade no banco
-                                with get_db_connection() as conn_update:
-                                    cur_update = conn_update.cursor()
-                                    cur_update.execute("""
-                                        UPDATE envios_montagem 
-                                        SET id_controle = %s, link_upload = %s, upload_hash = %s, validade_link = %s, data_envio_api = NOW()
-                                        WHERE id = %s
-                                    """, (id_controle_api, link_upload, upload_hash, validade_link, lote_id))
-                                    conn_update.commit()
-                            else:
-                                print(f"   ⚠️ API retornou erro: {resposta_api.get('message')}")
-                                print(f"   📦 Resposta completa: {resposta_api}")
-                                link_upload = None
-                        elif response_api.status_code == 409:
-                            # Conflito - registro já existe
-                            resposta_api = response_api.json()
-                            link_existente = resposta_api.get('link')
-                            hash_existente = resposta_api.get('hash')
-                            id_controle_existente = resposta_api.get('id_controle') or resposta_api.get('existing_id')
+                        if resultado_link.get('success'):
+                            link_upload = resultado_link.get('link')
+                            upload_hash = resultado_link.get('hash')
+                            id_controle_api = resultado_link.get('id_controle')
+                            validade_link = resultado_link.get('validade_link')
                             
-                            print(f"   ⚠️ Registro já existe na API (ID Controle: {id_controle_existente})")
-                            
-                            if link_existente:
-                                # API retornou o link existente na resposta de conflito
-                                link_upload = link_existente
-                                upload_hash = hash_existente
-                                id_controle_api = id_controle_existente
-                                print(f"   ✅ Link recuperado da resposta: {link_upload}")
-                                
-                                # Atualizar banco com os dados recuperados
-                                with get_db_connection() as conn_update:
-                                    cur_update = conn_update.cursor()
-                                    cur_update.execute("""
-                                        UPDATE envios_montagem 
-                                        SET id_controle = %s, link_upload = %s, upload_hash = %s
-                                        WHERE id = %s
-                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
-                                    conn_update.commit()
-                            else:
-                                # Se não veio link na resposta, buscar do banco
-                                print(f"   🔍 Buscando link existente no banco...")
-                                with get_db_connection() as conn_link:
-                                    cur_link = conn_link.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                                    cur_link.execute("""
-                                        SELECT link_upload, id_controle, upload_hash
-                                        FROM envios_montagem 
-                                        WHERE id = %s
-                                    """, (lote_id,))
-                                    registro_existente = cur_link.fetchone()
-                                    
-                                    if registro_existente and registro_existente['link_upload']:
-                                        link_upload = registro_existente['link_upload']
-                                        upload_hash = registro_existente['upload_hash']
-                                        print(f"   ✅ Link recuperado do banco: {link_upload}")
-                                    else:
-                                        print(f"   ❌ Link não encontrado! Tentando recriar na API...")
-                                        # Tentar com ID diferente (adicionar timestamp)
-                                        import time
-                                        lote_id_novo = int(f"{lote_id}{int(time.time()) % 1000}")
-                                        payload_api["lote_id"] = lote_id_novo
-                                        
-                                        response_retry = requests.post(
-                                            API_UPLOAD_URL,
-                                            json=payload_api,
-                                            headers=headers_api,
-                                            timeout=10,
-                                            verify=False
-                                        )
-                                        
-                                        if response_retry.status_code in [200, 201]:
-                                            resposta_retry = response_retry.json()
-                                            if resposta_retry.get('success'):
-                                                link_upload = resposta_retry.get('link')
-                                                upload_hash = resposta_retry.get('hash')
-                                                id_controle_api = resposta_retry.get('id_controle')
-                                                print(f"   ✅ Novo link gerado: {link_upload}")
-                                                
-                                                # Atualizar banco
-                                                with get_db_connection() as conn_update:
-                                                    cur_update = conn_update.cursor()
-                                                    cur_update.execute("""
-                                                        UPDATE envios_montagem 
-                                                        SET id_controle = %s, link_upload = %s, upload_hash = %s
-                                                        WHERE id = %s
-                                                    """, (id_controle_api, link_upload, upload_hash, lote_id))
-                                                    conn_update.commit()
-                                            else:
-                                                link_upload = None
-                                        else:
-                                            link_upload = None
+                            print(f"   ✅ Link interno gerado com sucesso!")
+                            print(f"   ✅ Link: {link_upload}")
+                            print(f"   ✅ Hash: {upload_hash}")
+                            print(f"   ✅ ID Controle: {id_controle_api}")
+                            print(f"   ✅ Validade: {validade_link}")
+                            print(f"   ✅ Sistema: {resultado_link.get('sistema', 'interno')}")
                         else:
-                            print(f"   ⚠️ API respondeu com status {response_api.status_code}")
-                            print(f"   📦 Resposta: {response_api.text[:200]}")
+                            print(f"   ⚠️ Erro ao gerar link interno: {resultado_link.get('message')}")
                             link_upload = None
                     
                     except Exception as e:
-                        print(f"   ⚠️ Erro ao chamar API: {e}")
+                        print(f"   ⚠️ Erro ao gerar link interno: {e}")
+                        import traceback
+                        traceback.print_exc()
                         link_upload = None
                 else:
                     # Para prestadores, o link será gerado mais abaixo
@@ -1784,101 +1686,40 @@ def enviar_lote_relatorios(request: dict):
                 assunto = email_config.get("assunto", "Relatório de Serviços")
                 corpo = email_config.get("corpo", "Segue relatório em anexo.")
                 
-                # Gerar link de upload via API externa (SOMENTE SE NÃO FOI GERADO ACIMA para montador)
+                # Gerar link de upload (SISTEMA INTERNO PARA PRESTADORES)
                 if link_upload is None and tipo == "prestador":
                     id_controle_api = None
                     try:
-                        import requests
-                        import re
-                        API_UPLOAD_URL = "http://api.link.dev.br/dvprocessamento/"
-                        API_UPLOAD_KEY = "DV_API_2025_CTRL_NOTAS_f8e9d2c1b4a6"
+                        from app.utils.link_upload_interno import gerar_link_upload
                         
-                        # Extrair mês/ano do período (API exige formato MM/AAAA)
-                        periodo_api = periodo
-                        if "/" in periodo and len(periodo) > 7:
-                            # Se for range de datas (ex: "05/10/2025 – 22/10/2025"), extrair a primeira data
-                            match = re.search(r'(\d{2})/(\d{2})/(\d{4})', periodo)
-                            if match:
-                                dia, mes, ano = match.groups()
-                                periodo_api = f"{mes}/{ano}"  # Formato MM/AAAA
-                            else:
-                                # Fallback: pegar só MM/AAAA se já estiver nesse formato
-                                match = re.search(r'(\d{2})/(\d{4})', periodo)
-                                if match:
-                                    periodo_api = periodo
-                                else:
-                                    # Último fallback: usar mês/ano atual
-                                    periodo_api = datetime.now().strftime("%m/%Y")
-                        elif "/" not in periodo:
-                            # Se não tem barra, assumir que é só o ano
-                            periodo_api = f"{periodo}/2025"
+                        print(f"   🆔 Gerando link interno para prestador (Lote #{lote_id})")
                         
-                        print(f"   📅 Período original: {periodo}")
-                        print(f"   📅 Período para API: {periodo_api}")
-                        
-                        # Preparar payload para API (usar lote_id real do banco)
-                        payload_api = {
-                            "nome": nome_destinatario,
-                            "email": email_destino,
-                            "periodo": periodo_api,
-                            "valor_total": detalhes_json['total_geral'] if tipo == "montador" else sum(float(item.get("valor_total", 0)) for item in itens),
-                            "quantidade_os": len(itens),
-                            "data_envio": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            "lote_id": lote_id,  # Usar ID real do banco
-                            "tipo": tipo
-                        }
-                        
-                        headers_api = {
-                            "Content-Type": "application/json; charset=utf-8",
-                            "Accept": "application/json",
-                            "User-Agent": "NovoMundo-DisparadorEmail/1.0",
-                            "X-API-Key": API_UPLOAD_KEY
-                        }
-                        
-                        print(f"   📤 Gerando link de upload via API (Lote #{lote_id})...")
-                        print(f"   📦 Payload enviado: {payload_api}")
-                        
-                        response_api = requests.post(
-                            API_UPLOAD_URL,
-                            json=payload_api,
-                            headers=headers_api,
-                            timeout=10,
-                            verify=False
+                        resultado_link = gerar_link_upload(
+                            nome=nome_destinatario,
+                            email=email_destino,
+                            periodo=periodo,
+                            valor_total=sum(float(item.get("valor_total", 0)) for item in itens),
+                            quantidade_os=len(itens),
+                            lote_id=lote_id,
+                            tipo='prestador',
+                            usar_interno=False,  # 🔄 USA API EXTERNA (api.link.dev.br)
+                            validade_dias=30
                         )
                         
-                        if response_api.status_code in [200, 201]:
-                            resposta_api = response_api.json()
-                            if resposta_api.get('success'):
-                                link_upload = resposta_api.get('link')
-                                id_controle_api = resposta_api.get('id_controle') or resposta_api.get('id')
-                                upload_hash = resposta_api.get('hash')  # ✅ CRÍTICO: Pegar o hash da resposta
-                                print(f"   ✅ Link gerado: {link_upload}")
-                                print(f"   ✅ ID Controle: {id_controle_api}")
-                                print(f"   ✅ Hash: {upload_hash}")
-                                
-                                # Salvar link, id_controle e hash no lote
-                                with get_db_connection() as conn_link:
-                                    cur_link = conn_link.cursor()
-                                    if tipo == "prestador":
-                                        cur_link.execute("""
-                                            UPDATE lotes_servico 
-                                            SET link_upload = %s, id_controle = %s, upload_hash = %s, data_envio_api = NOW()
-                                            WHERE id = %s
-                                        """, (link_upload, id_controle_api, upload_hash, lote_id))
-                                    else:
-                                        cur_link.execute("""
-                                            UPDATE envios_montagem 
-                                            SET link_upload = %s, id_controle = %s, upload_hash = %s, data_envio_api = NOW()
-                                            WHERE id = %s
-                                        """, (link_upload, id_controle_api, upload_hash, lote_id))
-                                    conn_link.commit()
-                            else:
-                                print(f"   ⚠️ API retornou erro: {resposta_api.get('message')}")
-                                print(f"   📋 Resposta completa da API: {resposta_api}")
-                                link_upload = None
+                        if resultado_link.get('success'):
+                            link_upload = resultado_link.get('link')
+                            upload_hash = resultado_link.get('hash')
+                            id_controle_api = resultado_link.get('id_controle')
+                            validade_link = resultado_link.get('validade_link')
+                            
+                            print(f"   ✅ Link interno gerado com sucesso!")
+                            print(f"   ✅ Link: {link_upload}")
+                            print(f"   ✅ Hash: {upload_hash}")
+                            print(f"   ✅ ID Controle: {id_controle_api}")
+                            print(f"   ✅ Validade: {validade_link}")
+                            print(f"   ✅ Sistema: {resultado_link.get('sistema', 'interno')}")
                         else:
-                            print(f"   ⚠️ API respondeu com status {response_api.status_code}")
-                            print(f"   📋 Resposta completa da API: {response_api.text}")
+                            print(f"   ⚠️ Erro ao gerar link interno: {resultado_link.get('message')}")
                             link_upload = None
                     
                     except Exception as e:
@@ -1889,7 +1730,7 @@ def enviar_lote_relatorios(request: dict):
                 
                 # Verificar se conseguiu gerar o link
                 if not link_upload:
-                    raise Exception("Falha ao gerar link de upload via API externa")
+                    raise Exception("Falha ao gerar link de upload")
                 
                 # Substituir variáveis no template
                 if tipo == "prestador":

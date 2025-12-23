@@ -6,28 +6,35 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import threading
+import logging
 from datetime import datetime
 from pathlib import Path
 import os
 import signal
 import subprocess
 from ..database import get_db_connection
+from ..utils.job_execution import job_execution_manager
 
 router = APIRouter()
 
-# Estado dos jobs em execução (em memória)
+# Logger para jobs
+logger = logging.getLogger('JobsRouter')
+
+# Estado dos jobs em execução (em memória - para status em tempo real)
 job_status = {
     'consulta_notas': {
         'running': False,
         'last_run': None,
         'last_result': None,
-        'error': None
+        'error': None,
+        'execution_id': None
     },
     'trello_montadores': {
         'running': False,
         'last_run': None,
         'last_result': None,
-        'error': None
+        'error': None,
+        'execution_id': None
     }
 }
 
@@ -66,16 +73,49 @@ async def executar_job_consulta_notas():
         # Executar em thread separada
         def run_job():
             from app.jobs.consultar_notas import processar_uploads_pendentes
+            import io
+            import sys
             
+            # Registrar início no banco
+            execution_id = job_execution_manager.iniciar_execucao('consulta_notas')
+            job_status['consulta_notas']['execution_id'] = execution_id
             job_status['consulta_notas']['running'] = True
             job_status['consulta_notas']['error'] = None
+            
+            # Capturar logs
+            log_buffer = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = log_buffer
             
             try:
                 result = processar_uploads_pendentes()
                 job_status['consulta_notas']['last_result'] = result
                 job_status['consulta_notas']['last_run'] = datetime.now().isoformat()
+                
+                # Salvar no banco
+                sys.stdout = old_stdout
+                logs = log_buffer.getvalue()
+                
+                job_execution_manager.finalizar_execucao(
+                    execution_id=execution_id,
+                    status='completed' if result.get('success') else 'error',
+                    result=result,
+                    logs=logs
+                )
+                
             except Exception as e:
-                job_status['consulta_notas']['error'] = str(e)
+                sys.stdout = old_stdout
+                logs = log_buffer.getvalue()
+                error_msg = str(e)
+                
+                job_status['consulta_notas']['error'] = error_msg
+                job_execution_manager.finalizar_execucao(
+                    execution_id=execution_id,
+                    status='error',
+                    error=error_msg,
+                    logs=logs
+                )
+                logger.error(f"Erro no job consulta_notas: {e}")
             finally:
                 job_status['consulta_notas']['running'] = False
         
@@ -108,7 +148,49 @@ async def get_resultado_consulta_notas():
         "status": "running" if status['running'] else "completed",
         "last_run": status['last_run'],
         "result": status['last_result'],
-        "error": status['error']
+        "error": status['error'],
+        "execution_id": status.get('execution_id')
+    }
+
+
+# ===== ENDPOINTS PARA HISTÓRICO DE EXECUÇÕES =====
+
+@router.get("/executions")
+async def get_job_executions(job_name: Optional[str] = None, limit: int = 20):
+    """
+    Retorna histórico de execuções de jobs
+    
+    Args:
+        job_name: Filtrar por nome do job (opcional)
+        limit: Quantidade máxima de registros (padrão: 20)
+    """
+    executions = job_execution_manager.obter_ultimas_execucoes(job_name, limit)
+    return {
+        "total": len(executions),
+        "executions": executions
+    }
+
+
+@router.get("/executions/stats/{job_name}")
+async def get_job_stats(job_name: str):
+    """Retorna estatísticas de um job específico"""
+    stats = job_execution_manager.obter_estatisticas(job_name)
+    return stats
+
+
+@router.delete("/executions/cleanup")
+async def cleanup_job_history(dias: int = 30):
+    """
+    Remove execuções antigas do histórico
+    
+    Args:
+        dias: Manter apenas execuções dos últimos N dias (padrão: 30)
+    """
+    removidos = job_execution_manager.limpar_historico(dias)
+    return {
+        "success": True,
+        "removidos": removidos,
+        "message": f"Removidos {removidos} registros com mais de {dias} dias"
     }
 
 

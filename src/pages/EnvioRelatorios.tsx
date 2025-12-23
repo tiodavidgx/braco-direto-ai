@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import { prestadoresService } from "@/services/prestadores.service";
 import { emailConfigService } from "@/services/email-config.service";
 import { Prestador } from "@/types/prestador";
+import { apiClient } from "@/services/api";
 
 // Interfaces baseadas no streamlit original
 interface PrestadorEntry {
@@ -136,8 +137,6 @@ Obrigado.`,
 
       setLoadingPreview(true);
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-        
         // Coletar O.S.
         const numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
         const checkEndpoint = "/blacklist/os/check";
@@ -149,25 +148,22 @@ Obrigado.`,
         }
 
         // Verificar blacklist
-        const blacklistResponse = await fetch(`${API_BASE_URL}${checkEndpoint}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ numbers }),
-        });
-
-        const blacklisted = blacklistResponse.ok 
-          ? (await blacklistResponse.json()).map(String)
-          : [];
+        let blacklisted: string[] = [];
+        try {
+          const blacklistData = await apiClient.post<string[]>(checkEndpoint, { numbers });
+          blacklisted = blacklistData.map(String);
+        } catch (e) {
+          console.error("Erro ao verificar blacklist:", e);
+        }
 
         // Verificar O.S. já enviadas
-        const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ os_numbers: numbers }),
-        });
-        const alreadySent = sentResponse.ok 
-          ? (await sentResponse.json()).map(String)
-          : [];
+        let alreadySent: string[] = [];
+        try {
+          const sentData = await apiClient.post<string[]>("/relatorios/verificar-os-enviadas", { os_numbers: numbers });
+          alreadySent = sentData.map(String);
+        } catch (e) {
+          console.error("Erro ao verificar O.S. enviadas:", e);
+        }
 
         // Criar preview de status
         const preview = numbers.map(num => {
@@ -351,64 +347,51 @@ Obrigado.`,
     toast.info("Enviando relatórios...");
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-      const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "prestador",
-          dados: dataParaEnvio,
-          emailConfig,
-          enviarWhatsApp,
-        }),
+      const result = await apiClient.post<any>("/relatorios/enviar-lote", {
+        tipo: "prestador",
+        dados: dataParaEnvio,
+        emailConfig,
+        enviarWhatsApp,
       });
 
-      if (response.ok) {
-        const result = await response.json();
+      // Mostrar status de cada O.S./boletim
+      if (result.os_status && result.os_status.length > 0) {
+        console.log("📊 Status das O.S./Boletins:");
+        console.table(result.os_status);
         
-        // Mostrar status de cada O.S./boletim
-        if (result.os_status && result.os_status.length > 0) {
-          console.log("📊 Status das O.S./Boletins:");
-          console.table(result.os_status);
-          
-          // Contar status
-          const statusCount = result.os_status.reduce((acc: any, item: any) => {
-            acc[item.status] = (acc[item.status] || 0) + 1;
-            return acc;
-          }, {});
-          
-          console.log("📈 Resumo:", statusCount);
-        }
+        // Contar status
+        const statusCount = result.os_status.reduce((acc: any, item: any) => {
+          acc[item.status] = (acc[item.status] || 0) + 1;
+          return acc;
+        }, {});
         
-        // Mensagens de feedback
-        if (result.message) {
-          toast.success(result.message);
-        } else if (result.sucesso > 0) {
-          toast.success(`✅ ${result.sucesso} relatórios enviados com sucesso!`);
-        }
-        
-        if (result.ignorados > 0) {
-          toast.warning(`⚠️ ${result.ignorados} itens ignorados (já enviados ou na blacklist)`);
-        }
-        
-        if (result.warning) {
-          toast.warning(result.warning);
-        }
-        
-        if (result.erros > 0 && result.detalhes_erros) {
-          console.error("Erros detalhados:", result.detalhes_erros);
-          toast.error(`❌ ${result.erros} envios falharam. Verifique o console.`);
-        }
-
-        // Limpar dados
-        setManualEntriesPrestador([]);
-        setExcelData([]);
-        setDataParaEnvio([]);
-      } else {
-        const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-        toast.error(error.detail || "Erro ao enviar relatórios");
-        console.error("Erro da API:", error);
+        console.log("📈 Resumo:", statusCount);
       }
+      
+      // Mensagens de feedback
+      if (result.message) {
+        toast.success(result.message);
+      } else if (result.sucesso > 0) {
+        toast.success(`✅ ${result.sucesso} relatórios enviados com sucesso!`);
+      }
+      
+      if (result.ignorados > 0) {
+        toast.warning(`⚠️ ${result.ignorados} itens ignorados (já enviados ou na blacklist)`);
+      }
+      
+      if (result.warning) {
+        toast.warning(result.warning);
+      }
+      
+      if (result.erros > 0 && result.detalhes_erros) {
+        console.error("Erros detalhados:", result.detalhes_erros);
+        toast.error(`❌ ${result.erros} envios falharam. Verifique o console.`);
+      }
+
+      // Limpar dados
+      setManualEntriesPrestador([]);
+      setExcelData([]);
+      setDataParaEnvio([]);
     } catch (error: any) {
       toast.error(`Erro ao enviar relatórios: ${error.message || "Erro desconhecido"}`);
       console.error("Erro completo:", error);

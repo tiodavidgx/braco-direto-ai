@@ -55,6 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { apiClient } from "@/services/api";
 
 interface OSItem {
   id: number;
@@ -107,26 +108,18 @@ export default function HistoricoEnvios() {
     const loadHistorico = async () => {
       try {
         setLoading(true);
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
         
         // Montar query params
-        const params = new URLSearchParams();
+        const params: Record<string, string> = {};
         if (tipoFiltro !== "todos") {
-          params.append("tipo", tipoFiltro);
+          params.tipo = tipoFiltro;
         }
         if (statusFiltro !== "todos") {
-          params.append("status", statusFiltro);
+          params.status = statusFiltro;
         }
         
-        const url = `${API_BASE_URL}/relatorios/historico${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await fetch(url);
-
-        if (response.ok) {
-          const data = await response.json();
-          setHistorico(data);
-        } else {
-          toast.error("Erro ao carregar histórico");
-        }
+        const data = await apiClient.get<HistoricoItem[]>('/relatorios/historico', params);
+        setHistorico(data);
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);
         toast.error("Erro ao carregar histórico");
@@ -150,15 +143,8 @@ export default function HistoricoEnvios() {
   const loadOSItems = async (loteId: number, tipo: string) => {
     try {
       setLoadingOS(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-      const response = await fetch(`${API_BASE_URL}/relatorios/historico/${loteId}/os?tipo=${tipo}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setOsItems(data);
-      } else {
-        toast.error("Erro ao carregar itens");
-      }
+      const data = await apiClient.get<OSItem[]>(`/relatorios/historico/${loteId}/os`, { tipo });
+      setOsItems(data);
     } catch (error) {
       console.error("Erro ao carregar itens:", error);
       toast.error("Erro ao carregar itens");
@@ -176,28 +162,20 @@ export default function HistoricoEnvios() {
 
   const handleDelete = async (id: number, tipo: string) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
       const endpoint = tipo === "prestador" 
-        ? `${API_BASE_URL}/relatorios/historico-envios/prestador/${id}`
-        : `${API_BASE_URL}/relatorios/historico-envios/montador/${id}`;
+        ? `/relatorios/historico-envios/prestador/${id}`
+        : `/relatorios/historico-envios/montador/${id}`;
       
-      const response = await fetch(endpoint, {
-        method: 'DELETE',
-      });
+      await apiClient.delete(endpoint);
 
-      if (response.ok) {
-        toast.success(`${tipo === "prestador" ? "Lote" : "Envio"} excluído com sucesso!`);
-        // Fechar o dialog
-        setOpenDialogId(null);
-        // Recarregar histórico
-        setHistorico(prevHistorico => prevHistorico.filter(item => item.id !== id));
-      } else {
-        const error = await response.json();
-        toast.error(error.detail || "Erro ao excluir");
-      }
-    } catch (error) {
+      toast.success(`${tipo === "prestador" ? "Lote" : "Envio"} excluído com sucesso!`);
+      // Fechar o dialog
+      setOpenDialogId(null);
+      // Recarregar histórico
+      setHistorico(prevHistorico => prevHistorico.filter(item => item.id !== id));
+    } catch (error: any) {
       console.error("Erro ao excluir:", error);
-      toast.error("Erro ao excluir registro");
+      toast.error(error.message || "Erro ao excluir registro");
     }
   };
 

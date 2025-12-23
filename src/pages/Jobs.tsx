@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Activity, Play, CheckCircle, XCircle, Clock, Settings } from 'lucide-react';
-import { jobsService } from '@/services/jobs.service';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Activity, Play, CheckCircle, XCircle, Clock, Settings, History, Trash2, RefreshCw } from 'lucide-react';
+import { jobsService, JobExecution } from '@/services/jobs.service';
 import { useToast } from '@/hooks/use-toast';
 
 // Componente para execução manual do job
@@ -458,6 +459,177 @@ function TrelloMontadoresControl() {
   );
 }
 
+// Componente para histórico de execuções
+function ExecutionHistory() {
+  const { toast } = useToast();
+  const [executions, setExecutions] = useState<JobExecution[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('');
+
+  const carregarHistorico = async () => {
+    try {
+      setLoading(true);
+      const data = await jobsService.getExecutions(filter || undefined, 50);
+      setExecutions(data.executions);
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarHistorico();
+    const interval = setInterval(carregarHistorico, 30000);
+    return () => clearInterval(interval);
+  }, [filter]);
+
+  const handleLimpar = async () => {
+    try {
+      const result = await jobsService.cleanupHistory(30);
+      toast({
+        title: 'Histórico limpo',
+        description: `${result.removidos} registros removidos`
+      });
+      carregarHistorico();
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível limpar o histórico',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '-';
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <Badge className="bg-green-600"><CheckCircle className="h-3 w-3 mr-1" />Concluído</Badge>;
+      case 'error':
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Erro</Badge>;
+      case 'running':
+        return <Badge className="bg-blue-600"><Activity className="h-3 w-3 mr-1 animate-spin" />Executando</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <select 
+            className="border rounded px-3 py-2 text-sm"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="">Todos os jobs</option>
+            <option value="consulta_notas">Consulta Notas</option>
+            <option value="trello_montadores">Trello Montadores</option>
+          </select>
+          <Button variant="outline" size="sm" onClick={carregarHistorico}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleLimpar}>
+          <Trash2 className="h-4 w-4 mr-1" />
+          Limpar Antigos (30 dias)
+        </Button>
+      </div>
+
+      {loading && executions.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Activity className="h-8 w-8 mx-auto mb-2 animate-spin" />
+          Carregando histórico...
+        </div>
+      ) : executions.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          Nenhuma execução registrada
+        </div>
+      ) : (
+        <ScrollArea className="h-[400px]">
+          <div className="space-y-2">
+            {executions.map((exec) => (
+              <div 
+                key={exec.id} 
+                className="border rounded-lg p-3 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">
+                      #{exec.id} - {exec.job_name.replace('_', ' ')}
+                    </span>
+                    {getStatusBadge(exec.status)}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDuration(exec.duration_seconds)}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>
+                    Início: {new Date(exec.started_at).toLocaleString('pt-BR')}
+                  </span>
+                  {exec.finished_at && (
+                    <span>
+                      Fim: {new Date(exec.finished_at).toLocaleString('pt-BR')}
+                    </span>
+                  )}
+                </div>
+
+                {exec.result && (
+                  <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+                    {exec.result.total_processados !== undefined && (
+                      <div className="bg-muted rounded px-2 py-1">
+                        <span className="text-muted-foreground">Processados:</span>{' '}
+                        <span className="font-medium">{exec.result.total_processados}</span>
+                      </div>
+                    )}
+                    {exec.result.arquivos_encontrados !== undefined && (
+                      <div className="bg-muted rounded px-2 py-1">
+                        <span className="text-muted-foreground">Arquivos:</span>{' '}
+                        <span className="font-medium">{exec.result.arquivos_encontrados}</span>
+                      </div>
+                    )}
+                    {exec.result.downloads !== undefined && (
+                      <div className="bg-green-100 dark:bg-green-900/30 rounded px-2 py-1">
+                        <span className="text-muted-foreground">Downloads:</span>{' '}
+                        <span className="font-medium text-green-600">{exec.result.downloads}</span>
+                      </div>
+                    )}
+                    {exec.result.erros !== undefined && exec.result.erros > 0 && (
+                      <div className="bg-red-100 dark:bg-red-900/30 rounded px-2 py-1">
+                        <span className="text-muted-foreground">Erros:</span>{' '}
+                        <span className="font-medium text-red-600">{exec.result.erros}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {exec.error && (
+                  <div className="mt-2 bg-destructive/10 text-destructive text-xs p-2 rounded">
+                    {exec.error}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
 export default function Jobs() {
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -509,6 +681,23 @@ export default function Jobs() {
         </CardHeader>
         <CardContent>
           <TrelloMontadoresControl />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-purple-600" />
+            <div>
+              <CardTitle>Histórico de Execuções</CardTitle>
+              <CardDescription>
+                Visualize o histórico completo de execuções dos jobs
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ExecutionHistory />
         </CardContent>
       </Card>
     </div>
