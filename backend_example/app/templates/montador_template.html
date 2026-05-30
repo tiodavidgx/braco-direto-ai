@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 30px; color: #333; }
+        .logo { text-align: center; margin-bottom: 20px; }
+        .logo img { max-width: 200px; height: auto; }
+        h1 { text-align: center; font-size: 22px; color: #003366; }
+        .subheader { text-align: center; font-size: 14px; margin-bottom: 25px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+        th { background-color: #f0f0f0; font-weight: bold; }
+        .summary-table { width: 60%; margin: 20px auto; border-collapse: collapse; font-size: 12px; }
+        .summary-table td { border: 1px solid #ccc; padding: 8px; }
+        .summary-table td:first-child { font-weight: bold; text-align: right; background-color: #f0f0f0; width: 70%; }
+        .total-row { font-weight: bold; font-size: 14px; color: #003366; }
+        .footer { margin-top: 40px; font-size: 10px; text-align: center; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        {% if logo_url %}<img src="{{ logo_url }}" alt="Novo Mundo Logo">{% endif %}
+    </div>
+    <h1>Relatório de Pagamento de Montagem</h1>
+    <div class="subheader">
+        <strong>Empresa montadora:</strong> {{ nome_montador }} | <strong>Período:</strong> {{ periodo_relatorio }}
+        <br>
+        <strong>Comissões:</strong> Montagem {{ "%.1f"|format(percentual_montagem * 100) }}% | Assistência Técnica {{ "%.1f"|format(percentual_assistencia * 100) }}% | Desmontagem {{ "%.1f"|format(percentual_desmontagem * 100) }}%
+    </div>
+    <h2>Detalhes das Montagens</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Boletim</th>
+                <th>Data da Montagem</th>
+                <th>Tipo de Serviço</th>
+                <th>Cliente</th>
+                <th>Produto</th>
+                <th>Valor Venda (R$)</th>
+                <th>Comissão (R$)</th>
+                <th>Adicional (R$)</th>
+                <th>Motivo Adicional</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.boletim }}</td>
+                <td>{{ item.data_montagem }}</td>
+                <td style="font-size: 9px;">
+                    {% if item.tipo_servico == "MONTAGEM" %}
+                        Montagem
+                    {% elif item.tipo_servico == "ASSISTENCIA_TECNICA" %}
+                        Assist. Técnica
+                    {% elif item.tipo_servico == "DESMONTAGEM" %}
+                        Desmontagem
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ item.cliente }}</td>
+                <td>{{ item.nome_produto }}</td>
+                <td>{{ "%.2f"|format(item.valor_venda) }}</td>
+                {# Lógica para mostrar a comissão editada se existir, senão a calculada #}
+                <td>
+                    {% if item.comissao_editada is not none and item.comissao_editada|float != item.comissao_calculada|float %}
+                        {{ "%.2f"|format(item.comissao_editada) }}
+                    {% else %}
+                        {{ "%.2f"|format(item.comissao_calculada) }}
+                    {% endif %}
+                </td>
+                <td>{{ "%.2f"|format(item.adicional) if item.adicional is not none else '0.00' }}</td>
+                <td style="font-size: 9px; text-align: left;">{{ item.motivo_valor_extra if item.motivo_valor_extra else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <h2>Resumo do Pagamento</h2>
+    <table class="summary-table">
+        <tbody>
+            <tr>
+                <td>Total Montagem (R$)</td>
+                <td>{{ "%.2f"|format(total_montagem) }}</td>
+            </tr>
+            <tr>
+                <td>Total Assistência Técnica (R$)</td>
+                <td>{{ "%.2f"|format(total_assistencia) }}</td>
+            </tr>
+            <tr>
+                <td>Total Desmontagem (R$)</td>
+                <td>{{ "%.2f"|format(total_desmontagem) }}</td>
+            </tr>
+            <tr>
+                <td>Total Adicionais (R$)</td>
+                <td>{{ "%.2f"|format(total_adicionais) }}</td>
+            </tr>
+            <tr>
+                <td>Auxílio Semanal (R$)</td>
+                <td>{{ "%.2f"|format(total_auxilio) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td>TOTAL A RECEBER (R$)</td>
+                <td>{{ "%.2f"|format(total_geral) }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <div class="footer">Este relatório foi gerado automaticamente.</div>
+</body>
+</html>

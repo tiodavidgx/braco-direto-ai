@@ -1,0 +1,16 @@
+identificador_do_montador,nome_do_montador,identificador_boletim_montagem,data_da_montagem,media_de_valor_venda,nome_do_cliente,nome_produto,tipo_servico,adicional,motivo_valor_extra
+2,david,B2026-001,2026-05-16,2500.00,Cliente Alpha,Sofá 4 Lugares,MONTAGEM,100.00,Deslocamento
+2,david,B2026-002,2026-05-18,1800.00,Cliente Beta,Guarda-Roupa 6 Portas,MONTAGEM,0,-
+2,david,B2026-003,2026-05-20,3200.00,Cliente Gamma,Cozinha Planejada,MONTAGEM,200.00,Montagem extra
+2,david,B2026-004,2026-05-22,900.00,Cliente Delta,Mesa de Jantar,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-005,2026-05-24,1500.00,Cliente Epsilon,Cama Box King,MONTAGEM,0,-
+2,david,B2026-006,2026-05-25,4200.00,Cliente Zeta,Home Theater,MONTAGEM,150.00,Instalação elétrica
+2,david,B2026-007,2026-05-26,1100.00,Cliente Eta,Rack TV,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-008,2026-05-27,2800.00,Cliente Theta,Estante Modular,MONTAGEM,0,-
+2,david,B2026-009,2026-05-28,1900.00,Cliente Iota,Armário Banheiro,MONTAGEM,50.00,Parafusos extras
+2,david,B2026-010,2026-05-29,3500.00,Cliente Kappa,Sala de Jantar Completa,MONTAGEM,0,-
+2,david,B2026-011,2026-05-10,2200.00,Cliente Lambda,Balcão Cozinha,DESMONTAGEM,0,-
+2,david,B2026-012,2026-05-12,1600.00,Cliente Mu,Poltrona Reclinável,MONTAGEM,0,-
+2,david,B2026-013,2026-05-14,5000.00,Cliente Nu,Quarto Infantil,MONTAGEM,300.00,Berço adicional
+2,david,B2026-014,2026-05-15,750.00,Cliente Xi,Cadeira Escritório,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-015,2026-05-17,2700.00,Cliente Omicron,Painel TV 75",MONTAGEM,0,-

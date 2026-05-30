@@ -1,0 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+venda1.csv
+venda2.csv
+venda3.csv
+
+# Secrets / env — NUNCA commitar
+.env
+.env.*
+!.env.example
+backend_example/.env
+backend_example/.env.*
+deploy/.env
+deploy/.env.production
+
+# Ambientes virtuais Python
+venv/
+.venv/
+
+# WhatsApp session data
+whatsapp-service/.wwebjs_auth/
+whatsapp-service/.wwebjs_cache/
+whatsapp-service/baileys_auth_info/
+
+# Uploads / CSVs sensíveis
+uploads/
+titulos*.csv
+.wwebjs_cache/
+*wwebjs_auth*/

@@ -1,0 +1,186 @@
+"""
+Cliente para consultar API externa de uploads de notas fiscais
+Baseado no sistema original: sistema_original/consulta_nf_client.py
+"""
+
+import requests
+from typing import Tuple, Dict, Any, Optional
+from datetime import datetime
+
+
+class ConsultaNFClient:
+    """
+    Cliente para consultar status de uploads na API externa (api.link.dev.br)
+    """
+    
+    def __init__(self):
+        self.base_url = "https://api.link.dev.br/dvprocessamento"
+        self.api_key = "<SUA_API_KEY_AQUI>"
+    
+    def consultar_e_processar(self, upload_hash: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Consulta status de um upload específico na API externa
+        
+        Args:
+            upload_hash: Hash único do upload gerado pela API
+            
+        Returns:
+            Tupla (sucesso, dados, erro)
+            - sucesso: True se consulta foi bem-sucedida
+            - dados: Dicionário com informações da nota e arquivos
+            - erro: Mensagem de erro caso sucesso seja False
+        """
+        try:
+            # Endpoint de consulta (POST, não GET!)
+            url = f"{self.base_url}/consulta-nf/"
+            
+            headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Accept": "application/json",
+                "User-Agent": "NovoMundo-DisparadorEmail/1.0",
+                "X-API-Key": self.api_key
+            }
+            
+            # Payload com o hash
+            payload = {
+                "hash": upload_hash
+            }
+            
+            # Log da requisição para debug
+            print(f"[DEBUG ConsultaNFClient] URL: {url}")
+            print(f"[DEBUG ConsultaNFClient] Headers: {headers}")
+            print(f"[DEBUG ConsultaNFClient] Payload: {payload}")
+            
+            # POST request (não GET!)
+            response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+            
+            # Log da resposta para debug
+            print(f"[DEBUG ConsultaNFClient] Status Code: {response.status_code}")
+            print(f"[DEBUG ConsultaNFClient] Response Text: {response.text[:500]}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # A API retorna estrutura diferente
+                if not data.get('success'):
+                    return False, None, data.get('message', 'API retornou success=false')
+                
+                nota_fiscal = data.get('nota_fiscal', {})
+                arquivos_raw = data.get('arquivos', [])
+                stats = data.get('estatisticas', {})
+                status_info = data.get('status_info', {})
+                
+                # Processar resposta
+                nota_info = {
+                    'hash': upload_hash,
+                    'status': 1 if arquivos_raw else 0,  # 1=recebido, 0=aguardando
+                    'status_descricao': status_info.get('descricao', 'Aguardando upload'),
+                    'link_valido': status_info.get('link_valido', False),
+                    'dias_restantes': status_info.get('dias_restantes', 0),
+                    'numero_nota': None,  # Não vem na resposta
+                    'data_upload': arquivos_raw[0].get('data_upload') if arquivos_raw else None
+                }
+                
+                # Processar arquivos
+                arquivos = []
+                for arq in arquivos_raw:
+                    arquivos.append({
+                        'nome_original': arq.get('nome_original'),
+                        'tamanho': arq.get('tamanho_arquivo', 0),
+                        'tamanho_formatado': arq.get('tamanho_formatado', '0 B'),
+                        'link_download': arq.get('link_download'),
+                        'data_upload': arq.get('data_upload')
+                    })
+                
+                # Estatísticas
+                estatisticas = {
+                    'total_arquivos': stats.get('total_arquivos', len(arquivos)),
+                    'total_tamanho': stats.get('total_tamanho', 0),
+                    'total_tamanho_formatado': stats.get('total_tamanho_formatado', '0 B')
+                }
+                
+                resultado = {
+                    'nota': nota_info,
+                    'arquivos': arquivos,
+                    'estatisticas': estatisticas
+                }
+                
+                return True, resultado, None
+            
+            elif response.status_code == 404:
+                return True, {
+                    'nota': {
+                        'hash': upload_hash,
+                        'status': 0,
+                        'status_descricao': 'Não encontrado',
+                        'link_valido': False,
+                        'dias_restantes': 0
+                    },
+                    'arquivos': [],
+                    'estatisticas': {
+                        'total_arquivos': 0,
+                        'total_tamanho': 0,
+                        'total_tamanho_formatado': '0 B'
+                    }
+                }, None
+            
+            else:
+                return False, None, f"Erro HTTP {response.status_code}"
+        
+        except requests.exceptions.Timeout:
+            return False, None, "Timeout na requisição"
+        except requests.exceptions.RequestException as e:
+            return False, None, f"Erro de rede: {str(e)}"
+        except Exception as e:
+            return False, None, f"Erro inesperado: {str(e)}"
+    
+    def baixar_arquivo(self, url_download: str, caminho_destino: str) -> Tuple[bool, str]:
+        """
+        Baixa um arquivo da API externa
+        
+        Args:
+            url_download: URL completa para download
+            caminho_destino: Caminho local onde salvar o arquivo
+            
+        Returns:
+            Tupla (sucesso, mensagem)
+        """
+        try:
+            headers = {
+                "User-Agent": "NovoMundo-DisparadorEmail/1.0",
+                "X-API-Key": self.api_key
+            }
+            
+            response = requests.get(url_download, headers=headers, timeout=120, stream=True, verify=False)
+            
+            if response.status_code == 200:
+                with open(caminho_destino, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                return True, f"Arquivo baixado com sucesso"
+            else:
+                return False, f"Erro HTTP {response.status_code}"
+        
+        except requests.exceptions.Timeout:
+            return False, "Timeout no download"
+        except Exception as e:
+            return False, f"Erro ao baixar: {str(e)}"
+    
+    def _get_status_descricao(self, status: int) -> str:
+        """Retorna descrição do status"""
+        status_map = {
+            0: 'Aguardando upload',
+            1: 'Arquivo(s) recebido(s)',
+            2: 'Link expirado'
+        }
+        return status_map.get(status, 'Desconhecido')
+    
+    def _formatar_tamanho(self, tamanho_bytes: int) -> str:
+        """Formata tamanho em bytes para formato legível"""
+        for unidade in ['B', 'KB', 'MB', 'GB']:
+            if tamanho_bytes < 1024.0:
+                return f"{tamanho_bytes:.2f} {unidade}"
+            tamanho_bytes /= 1024.0
+        return f"{tamanho_bytes:.2f} TB"

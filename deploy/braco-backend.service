@@ -1,0 +1,23 @@
+[Unit]
+Description=Braco Direto AI Backend (FastAPI)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/www/braco-direto-ai/backend_example
+Environment="PATH=/var/www/braco-direto-ai/backend_example/venv/bin"
+ExecStart=/var/www/braco-direto-ai/backend_example/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/www/braco-direto-ai/logs/backend.log
+StandardError=append:/var/www/braco-direto-ai/logs/backend.error.log
+
+# Limites de recursos
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

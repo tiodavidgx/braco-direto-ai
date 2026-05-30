@@ -1,0 +1,150 @@
+{
+<<<<<<< HEAD
+  "version": "1.1.2925",
+  "lastUpdate": "2025-12-09",
+  "changelog": [
+    {
+      "version": "1.1.2925",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2924",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2923",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2922",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2921",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2920",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2919",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2918",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2917",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+      ]
+    },
+    {
+      "version": "1.1.2916",
+      "date": "2025-12-09",
+      "changes": [
+        "Add Excel date conversion utility and update report logic\n\nIntroduces the converter_data_excel function to handle Excel serial date formats and other date representations, ensuring consistent dd/mm/yyyy formatting in reports. Refactors multiple report generation and template preparation sections to use this utility. Also adds three new PDF files to the uploads directory."
+=======
+  "version": "1.1.738",
+  "lastUpdate": "2025-12-03",
+  "changelog": [
+    {
+      "version": "1.1.738",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.737",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.736",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.735",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.734",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.733",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.732",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.731",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.730",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+      ]
+    },
+    {
+      "version": "1.1.729",
+      "date": "2025-12-03",
+      "changes": [
+        "Normalize O.S. numbers and improve date handling\n\nAdded normalization for O.S. numbers to ensure consistent comparison and matching, including handling Excel float formats. Improved date parsing in PDF generation to robustly support various formats (ISO strings, Excel serials, timestamps). Added utility scripts for database checks, updated backend startup script to better handle virtual environments, and included new uploads and system initialization script."
+>>>>>>> d581fb9bd3cdcd06847ea13fd81a0f29a0434b8a
+      ]
+    }
+  ]
+}

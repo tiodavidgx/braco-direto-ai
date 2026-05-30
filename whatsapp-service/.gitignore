@@ -1,0 +1,14 @@
+# Dependências
+node_modules/
+package-lock.json
+
+# Dados de autenticação do WhatsApp
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store

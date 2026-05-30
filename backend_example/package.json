@@ -1,0 +1,11 @@
+{
+  "name": "braco-direto-backend",
+  "version": "1.0.0",
+  "description": "Backend utilities for Braco Direto",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

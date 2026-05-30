@@ -1,0 +1,24 @@
+[Unit]
+Description=WhatsApp Web.js Server for Braco Direto
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/www/braco-direto-ai/whatsapp-service
+Environment="NODE_ENV=production"
+ExecStart=/usr/bin/node server-baileys.js
+Restart=always
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+TimeoutStopSec=15
+StandardOutput=append:/var/www/braco-direto-ai/logs/whatsapp.log
+StandardError=append:/var/www/braco-direto-ai/logs/whatsapp.error.log
+
+# Limites de recursos
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

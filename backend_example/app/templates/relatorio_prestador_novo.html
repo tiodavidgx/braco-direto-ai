@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Fechamento</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            color: #1a1a1a;
+            line-height: 1.4;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #003366;
+        }
+        
+        .logo {
+            margin-bottom: 15px;
+        }
+        
+        .logo img {
+            height: 50px;
+            width: auto;
+        }
+        
+        .title {
+            font-size: 18pt;
+            font-weight: 600;
+            color: #003366;
+            margin-bottom: 8px;
+        }
+        
+        .info-line {
+            font-size: 11pt;
+            color: #333;
+            margin: 4px 0;
+        }
+        
+        .info-line strong {
+            color: #003366;
+        }
+        
+        .lote-badge {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 10pt;
+            color: #666;
+            margin-top: 8px;
+        }
+        
+        /* Table */
+        .table-wrapper {
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        
+        thead {
+            background: #003366;
+            color: white;
+        }
+        
+        thead th {
+            padding: 10px 6px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 9pt;
+            border: 1px solid #002244;
+        }
+        
+        tbody td {
+            padding: 8px 6px;
+            text-align: center;
+            border: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        
+        tbody tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        tbody tr:hover {
+            background: #f0f7ff;
+        }
+        
+        /* Columns */
+        .col-os { width: 8%; }
+        .col-cliente { width: 12%; text-align: left !important; }
+        .col-local { width: 10%; }
+        .col-modalidade { width: 20%; font-size: 8pt; }
+        .col-data { width: 9%; }
+        .col-valor { width: 9%; text-align: right !important; }
+        .col-extra { width: 9%; text-align: right !important; }
+        .col-motivo { width: 14%; font-size: 8pt; }
+        .col-total { width: 9%; text-align: right !important; font-weight: 600; }
+        
+        /* Footer Row */
+        .total-row {
+            background: #003366 !important;
+            color: white !important;
+            font-weight: bold;
+            font-size: 10pt;
+        }
+        
+        .total-row td {
+            padding: 12px 8px;
+            border: 1px solid #002244;
+        }
+        
+        .total-row .label {
+            text-align: right;
+        }
+        
+        .total-row .value {
+            text-align: right;
+            font-size: 11pt;
+        }
+        
+        /* Footer */
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 8pt;
+            color: #666;
+        }
+        
+        /* Print optimization */
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            
+            .table-wrapper {
+                page-break-inside: avoid;
+            }
+            
+            tr {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+            </div>
+            <div class="title">Relatório de Fechamento para Faturamento</div>
+            <div class="info-line">
+                <strong>Prestador:</strong> {{ nome_prestador }}
+            </div>
+            <div class="info-line">
+                <strong>Período:</strong> {{ periodo }}
+            </div>
+            <div class="lote-badge">#{{ lote_id }}</div>
+        </div>
+        
+        <!-- Table -->
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-os">O.S</th>
+                        <th class="col-cliente">Cliente</th>
+                        <th class="col-local">Localidade</th>
+                        <th class="col-modalidade">Modalidade de Serviço</th>
+                        <th class="col-data">Data Execução</th>
+                        <th class="col-valor">Valor<br>(R$)</th>
+                        <th class="col-extra">Valor Extra<br>(R$)</th>
+                        <th class="col-motivo">Motivo Extra</th>
+                        <th class="col-total">Valor Total<br>(R$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td class="col-os">{{ item.OS }}</td>
+                        <td class="col-cliente">{{ item.Cliente }}</td>
+                        <td class="col-local">{{ item.Localidade }}</td>
+                        <td class="col-modalidade">{{ item.Modalidade }}</td>
+                        <td class="col-data">{{ item.Data_execucao }}</td>
+                        <td class="col-valor">{{ item.Valor }}</td>
+                        <td class="col-extra">{{ item.Valor_extra }}</td>
+                        <td class="col-motivo">{{ item.Motivo_valor_extra }}</td>
+                        <td class="col-total">{{ item.Valor_total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td colspan="8" class="label">TOTAL GERAL (R$)</td>
+                        <td class="value">{{ "%.2f"|format(total_geral) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            Relatório gerado automaticamente pelo Sistema Disparador Novo Mundo
+        </div>
+    </div>
+</body>
+</html>

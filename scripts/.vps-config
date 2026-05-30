@@ -1,0 +1,28 @@
+# ===========================================
+# Configurações da VPS - NÃO COMMITAR!
+# Adicione ao .gitignore
+# ===========================================
+
+# VPS Hostinger
+VPS_HOST=72.60.244.138
+VPS_USER=root
+VPS_PASS=D123456789ss11#
+
+# Banco de Dados
+DB_NAME=email
+DB_USER=bracodireto
+DB_PASS=BracoDireto2025Prod!
+DB_HOST=localhost
+DB_PORT=5432
+
+# Caminhos
+APP_DIR=/var/www/braco-direto-ai
+BACKEND_DIR=/var/www/braco-direto-ai/backend_example
+
+# URLs
+FRONTEND_URL=http://72.60.244.138
+API_URL=http://72.60.244.138:3080
+
+# Git
+REPO_URL=https://github.com/davidgsas/braco-direto-ai.git
+BRANCH=melhorias
