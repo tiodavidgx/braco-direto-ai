@@ -77,6 +77,14 @@ interface PreCadastro {
   // Campos de responsável
   responsavel_id: number | null;
   responsavel_nome: string | null;
+  // Novos campos
+  envio_automatico: boolean;
+  dia_fechamento: number;
+  dias_envio_mes: number[];
+  prazo_pagamento_dias: number;
+  email_responsavel_nm: string | null;
+  tipo_pagamento: string | null;
+  terceirizada_id: number | null;
   status: string;
   etapa_atual: number;
   observacoes: string | null;
@@ -188,6 +196,30 @@ export default function PreCadastroMontadores() {
   const [cadastroParaConverter, setCadastroParaConverter] = useState<PreCadastro | null>(null);
   const [identificador, setIdentificador] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
+
+  // Terceirizadas
+  const [terceirizadasLista, setTerceirizadasLista] = useState<any[]>([]);
+
+  const carregarTerceirizadas = async () => {
+    try {
+      const data = await apiClient.get<any[]>("/terceirizadas?ativo=true");
+      setTerceirizadasLista(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar terceirizadas:", error);
+    }
+  };
+
+  // Templates de email
+  const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
+
+  const carregarEmailTemplates = async () => {
+    try {
+      const res = await apiClient.get<{ data: any[] }>("/email-templates?tipo=montador&ativo=true");
+      setEmailTemplates(res.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar templates de email:", error);
+    }
+  };
   
   // Form state
   const [form, setForm] = useState({
@@ -210,13 +242,14 @@ export default function PreCadastroMontadores() {
     auxilio_semanal: "0.00",
     observacoes: "",
     // Novos campos
-    envio_automatico: false,
+envio_automatico: true,
     dia_fechamento: "25",
-    dias_envio_mes: [] as number[],
+    dias_envio_mes: [16, 26] as number[],
     prazo_pagamento_dias: "10",
     email_responsavel_nm: "",
     tipo_pagamento: "novo_mundo" as string,
     terceirizada_id: null as number | null,
+    email_template_id: null as number | null,
   });
 
   useEffect(() => {
@@ -286,6 +319,8 @@ export default function PreCadastroMontadores() {
   const abrirNovoCadastro = () => {
     setEditando(null);
     setEtapaAtual(1);
+    carregarTerceirizadas();
+    carregarEmailTemplates();
     setForm({
       tipo_pessoa: "PF",
       nome: "",
@@ -305,13 +340,14 @@ export default function PreCadastroMontadores() {
       percentual_desmontagem: "2.0",
       auxilio_semanal: "0.00",
       observacoes: "",
-      envio_automatico: false,
+      envio_automatico: true,
       dia_fechamento: "25",
-      dias_envio_mes: [],
+      dias_envio_mes: [16, 26],
       prazo_pagamento_dias: "10",
       email_responsavel_nm: "",
       tipo_pagamento: "novo_mundo",
       terceirizada_id: null,
+      email_template_id: null,
     });
     setDialogOpen(true);
   };
@@ -319,6 +355,8 @@ export default function PreCadastroMontadores() {
   const abrirEdicao = (cadastro: PreCadastro) => {
     setEditando(cadastro);
     setEtapaAtual(cadastro.etapa_atual || 1);
+    carregarTerceirizadas();
+    carregarEmailTemplates();
     setForm({
       tipo_pessoa: cadastro.tipo_pessoa,
       nome: cadastro.nome || "",
@@ -338,13 +376,14 @@ export default function PreCadastroMontadores() {
       percentual_desmontagem: cadastro.percentual_desmontagem?.toString() || "5.0",
       auxilio_semanal: cadastro.auxilio_semanal?.toString() || "100.00",
       observacoes: cadastro.observacoes || "",
-      envio_automatico: (cadastro as any).envio_automatico ?? false,
+      envio_automatico: true,
       dia_fechamento: ((cadastro as any).dia_fechamento ?? 25).toString(),
-      dias_envio_mes: (cadastro as any).dias_envio_mes || [],
+      dias_envio_mes: (cadastro as any).dias_envio_mes?.length ? (cadastro as any).dias_envio_mes : [16, 26],
       prazo_pagamento_dias: ((cadastro as any).prazo_pagamento_dias ?? 10).toString(),
       email_responsavel_nm: (cadastro as any).email_responsavel_nm || "",
       tipo_pagamento: (cadastro as any).tipo_pagamento || "novo_mundo",
       terceirizada_id: (cadastro as any).terceirizada_id || null,
+      email_template_id: (cadastro as any).email_template_id || null,
     });
     setDialogOpen(true);
   };
@@ -968,6 +1007,44 @@ export default function PreCadastroMontadores() {
             <p className="text-muted-foreground text-sm mb-4">
               Configure os percentuais de comissão negociados com o montador
             </p>
+
+            {/* Pagamento por */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Pagamento por</Label>
+                <Select
+                  value={form.tipo_pagamento}
+                  onValueChange={(v) => setForm({ ...form, tipo_pagamento: v, terceirizada_id: v === "novo_mundo" ? null : form.terceirizada_id })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="novo_mundo">Novo Mundo</SelectItem>
+                    <SelectItem value="terceirizada">Terceirizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {form.tipo_pagamento === "terceirizada" && (
+                <div>
+                  <Label>Terceirizada</Label>
+                  <Select
+                    value={form.terceirizada_id?.toString() || ""}
+                    onValueChange={(v) => setForm({ ...form, terceirizada_id: v ? parseInt(v) : null })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {terceirizadasLista.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id.toString()}>{t.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1034,47 +1111,43 @@ export default function PreCadastroMontadores() {
               />
             </div>
 
-            {/* Envio Automático */}
+            {/* Envio Automático — sempre ativo */}
             <div className="border rounded-md p-3 space-y-3 mt-4">
-              <div className="flex items-center justify-between">
-                <Label className="font-medium">Envio Automático</Label>
-                <Switch
-                  checked={form.envio_automatico}
-                  onCheckedChange={(c) => setForm({ ...form, envio_automatico: c })}
-                />
+              <Label className="font-medium">Envio Automático</Label>
+              <div>
+                <Label className="text-xs">Dias de Envio</Label>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({length: 28}, (_, i) => i + 1).map(d => (
+                    <button key={d} type="button" onClick={() => {
+                      if (!isAdmin) { toast.error("Solicite para um administrador a alteração da data de envio"); return; }
+                      setForm({ ...form, dias_envio_mes: form.dias_envio_mes.includes(d) ? form.dias_envio_mes.filter(x => x !== d) : [...form.dias_envio_mes, d].sort((a,b) => a-b) })
+                    }}
+                      className={`h-7 text-xs rounded border ${form.dias_envio_mes.includes(d) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-input"}`}
+                    >{d}</button>
+                  ))}
+                </div>
               </div>
-              {form.envio_automatico && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">Dia de Fechamento</Label>
-                      <Select value={form.dia_fechamento} onValueChange={(v) => setForm({ ...form, dia_fechamento: v })}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Array.from({length: 28}, (_, i) => i + 1).map(d => (
-                            <SelectItem key={d} value={d.toString()}>Dia {d}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Prazo Pagamento (dias)</Label>
-                      <Input type="number" className="h-8 text-xs" value={form.prazo_pagamento_dias}
-                        onChange={(e) => setForm({ ...form, prazo_pagamento_dias: e.target.value })} />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Dias de Envio</Label>
-                    <div className="grid grid-cols-7 gap-1">
-                      {Array.from({length: 28}, (_, i) => i + 1).map(d => (
-                        <button key={d} type="button" onClick={() => setForm({ ...form, dias_envio_mes: form.dias_envio_mes.includes(d) ? form.dias_envio_mes.filter(x => x !== d) : [...form.dias_envio_mes, d].sort((a,b) => a-b) })}
-                          className={`h-7 text-xs rounded border ${form.dias_envio_mes.includes(d) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-input"}`}
-                        >{d}</button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+              
+              {/* Template de Email */}
+              <div>
+                <Label className="text-xs">Template de Email</Label>
+                <Select 
+                  value={form.email_template_id?.toString() || "__default__"} 
+                  onValueChange={(v) => setForm({ ...form, email_template_id: v === "__default__" ? null : parseInt(v) })}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Template padrão" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">Padrão Montador</SelectItem>
+                    {emailTemplates.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id.toString()}>
+                        {t.nome} {t.is_default ? "(padrão)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         );

@@ -331,22 +331,50 @@ const RevisaoCadastroMontador = () => {
 
     setConcluindo(true);
     try {
-      // 1. Criar o montador na tabela de montadores
-      // Converter percentuais de 5% para 0.05 (dividir por 100)
-      await apiClient.post("/montadores", {
-        identificador: idMontador.trim(),
-        nome: selectedCadastro.nome,
-        fornecedor_id: numeroFornecedor.trim(),
-        email: selectedCadastro.email || `montador${idMontador.trim()}@semmail.com`,
-        telefone: selectedCadastro.telefone || "",
-        filial: selectedCadastro.filial || "",
-        cidade: selectedCadastro.cidade || "",
-        percentual_montagem: (selectedCadastro.percentual_montagem || 5) / 100,
-        percentual_assistencia: (selectedCadastro.percentual_assistencia || 3) / 100,
-        percentual_desmontagem: (selectedCadastro.percentual_desmontagem || 2) / 100,
-        auxilio_semanal: selectedCadastro.auxilio_semanal || 0,
-        ativo: true
-      });
+      // 1. Criar o montador na tabela de montadores (ignorar se já existir)
+      try {
+        await apiClient.post("/montadores", {
+          identificador: idMontador.trim(),
+          nome: selectedCadastro.nome,
+          fornecedor_id: numeroFornecedor.trim(),
+          email: selectedCadastro.email || `montador${idMontador.trim()}@semmail.com`,
+          telefone: selectedCadastro.telefone || "",
+          filial: selectedCadastro.filial || "",
+          cidade: selectedCadastro.cidade || "",
+          pix: selectedCadastro.pix || "",
+          percentual_montagem: (selectedCadastro.percentual_montagem || 5) / 100,
+          percentual_assistencia: (selectedCadastro.percentual_assistencia || 3) / 100,
+          percentual_desmontagem: (selectedCadastro.percentual_desmontagem || 2) / 100,
+          auxilio_semanal: selectedCadastro.auxilio_semanal || 0,
+          ativo: true,
+          envio_automatico: true,
+          dias_envio_mes: (selectedCadastro as any).dias_envio_mes || [16, 26],
+          email_responsavel_nm: (selectedCadastro as any).email_responsavel_nm || "",
+          tipo_pagamento: (selectedCadastro as any).tipo_pagamento || "novo_mundo",
+          terceirizada_id: (selectedCadastro as any).terceirizada_id || null,
+          email_template_id: (selectedCadastro as any).email_template_id || null,
+        });
+      } catch (err: any) {
+        // Se já existe, atualiza com os dados completos do pré-cadastro
+        if (err.message?.includes("já existe") || err.message?.includes("already exists")) {
+          console.log("Montador já existe, atualizando dados...");
+          try {
+            await apiClient.put(`/montadores/${idMontador.trim()}`, {
+              pix: selectedCadastro.pix || "",
+              envio_automatico: true,
+              dias_envio_mes: (selectedCadastro as any).dias_envio_mes || [16, 26],
+              email_responsavel_nm: (selectedCadastro as any).email_responsavel_nm || "",
+              tipo_pagamento: (selectedCadastro as any).tipo_pagamento || "novo_mundo",
+              terceirizada_id: (selectedCadastro as any).terceirizada_id || null,
+              email_template_id: (selectedCadastro as any).email_template_id || null,
+            });
+          } catch (updateErr: any) {
+            console.log("Atualização do montador existente falhou (não crítico):", updateErr.message);
+          }
+        } else {
+          throw err;
+        }
+      }
 
       // 2. Concluir o pré-cadastro com histórico
       await apiClient.post(`/pre-cadastro-montadores/${selectedCadastro.id}/concluir`, {

@@ -13,12 +13,13 @@ import { apiClient } from "@/services/api";
 import {
   Zap, Calendar, DollarSign, Package, Send, Trash2, Eye, Search, RefreshCw,
   TrendingUp, Clock, CheckCircle2, Users, ArrowRight, Plus, ArrowLeft,
+  ChevronDown, ChevronRight, AlertCircle,
 } from "lucide-react";
 
 // --- Tipos ---
 interface MontadorResumo {
   id: number; nome: string; identificador: string;
-  dias_envio: number[]; proximos_dias: number[];
+  dias_envio: number[];
   qtd_pendentes: number; total_venda: number; total_comissao: number;
   periodo_inicio: string; periodo_fim: string;
   badge: string; badge_label: string;
@@ -44,7 +45,7 @@ const fd = (d: string) => { if (!d) return "-"; try { return new Date(d + "T00:0
 // ============================================================
 // PÁGINA DE DETALHE (tela cheia)
 // ============================================================
-function DetalheMontadorPage({ montadorId, onBack }: { montadorId: number; onBack: () => void }) {
+function DetalheMontadorPage({ montadorId, periodoInicio, periodoFim, onBack }: { montadorId: number; periodoInicio?: string; periodoFim?: string; onBack: () => void }) {
   const [data, setData] = useState<DetalhesMontador | null>(null);
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -55,7 +56,11 @@ function DetalheMontadorPage({ montadorId, onBack }: { montadorId: number; onBac
 
   const carregar = async () => {
     setLoading(true);
-    try { setData(await apiClient.get<DetalhesMontador>(`/auto-envio/montadores/${montadorId}/boletins`)); }
+    const params = new URLSearchParams();
+    if (periodoInicio) params.set('data_inicio_param', periodoInicio);
+    if (periodoFim) params.set('data_fim_param', periodoFim);
+    const qs = params.toString();
+    try { setData(await apiClient.get<DetalhesMontador>(`/auto-envio/montadores/${montadorId}/boletins${qs ? '?' + qs : ''}`)); }
     catch { toast.error("Erro ao carregar"); }
     finally { setLoading(false); }
   };
@@ -63,7 +68,20 @@ function DetalheMontadorPage({ montadorId, onBack }: { montadorId: number; onBac
 
   const forcarEnvio = async () => {
     setEnviando(true);
-    try { await apiClient.post(`/auto-envio/montadores/${montadorId}/forcar-envio`, {}); toast.success("Envio confirmado! Os relatórios foram disparados."); onBack(); }
+    try {
+      if (isFuturo) {
+        // Ciclo futuro → pré-aprovar (dispara automático no dia)
+        await apiClient.post(`/auto-envio/montadores/${montadorId}/pre-aprovar`, {});
+        toast.success("Pré-aprovado! O envio será automático no dia do vencimento.");
+      } else {
+        // Hoje ou vencido → enviar agora
+        const body: any = {};
+        if (cicloVencido && periodoFim) body.ate_data = periodoFim;
+        await apiClient.post(`/auto-envio/montadores/${montadorId}/forcar-envio`, body);
+        toast.success("Envio confirmado! Os relatórios foram disparados.");
+      }
+      onBack();
+    }
     catch (e: any) { toast.error(e.message || "Erro"); }
     finally { setEnviando(false); }
   };
@@ -100,6 +118,11 @@ function DetalheMontadorPage({ montadorId, onBack }: { montadorId: number; onBac
   if (!data) return <div className="text-center py-12 text-muted-foreground">Erro ao carregar dados</div>;
 
   const p = data.boletins.filter(b => b.status === "pendente").length;
+  const hoje = new Date().getDate();
+  const dias = data?.montador?.dias_envio_mes || [];
+  const cicloVencido = periodoFim && new Date(periodoFim + "T00:00:00") < new Date();
+  const podeEnviar = true; // Sempre pode confirmar
+  const isFuturo = !cicloVencido && !dias.includes(hoje);
   const bq = data.boletins.filter(b => b.status === "bloqueado").length;
   const dp = data.boletins.filter(b => b.status === "duplicado").length;
   const ok = data.boletins.filter(b => b.status === "processado").length;
@@ -117,7 +140,9 @@ function DetalheMontadorPage({ montadorId, onBack }: { montadorId: number; onBac
           <Button variant="outline" size="sm" onClick={carregar}><RefreshCw className="h-4 w-4" /></Button>
           <Button size="sm" onClick={forcarEnvio} disabled={enviando || p === 0} className="gap-2">
             <Send className="h-4 w-4" />
-            {enviando ? "Enviando..." : `Confirmar Envio (${p})`}
+            {enviando ? "Enviando..." : 
+             isFuturo ? `Confirmar Envio (${p}) — automático no dia` : 
+             `Confirmar Envio (${p})`}
           </Button>
         </div>
       </div>
@@ -217,6 +242,9 @@ export default function EnvioAutomaticoMontadores() {
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todos");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedPeriodoInicio, setSelectedPeriodoInicio] = useState<string | undefined>();
+  const [selectedPeriodoFim, setSelectedPeriodoFim] = useState<string | undefined>();
+  const [openMontadores, setOpenMontadores] = useState<Set<string>>(new Set());
 
   useEffect(() => { carregar(); }, []);
 
@@ -250,7 +278,7 @@ export default function EnvioAutomaticoMontadores() {
 
   // Tela de detalhe
   if (selectedId) {
-    return <DetalheMontadorPage montadorId={selectedId} onBack={() => { setSelectedId(null); carregar(); }} />;
+    return <DetalheMontadorPage montadorId={selectedId} periodoInicio={selectedPeriodoInicio} periodoFim={selectedPeriodoFim} onBack={() => { setSelectedId(null); setSelectedPeriodoInicio(undefined); setSelectedPeriodoFim(undefined); carregar(); }} />;
   }
 
   // Loading
@@ -280,29 +308,144 @@ export default function EnvioAutomaticoMontadores() {
         <div className="flex gap-1 flex-wrap">{filtros.map(f => <Button key={f.value} variant={filtroStatus === f.value ? "default" : "outline"} size="sm" onClick={() => setFiltroStatus(f.value)} className="text-xs h-8">{f.label} ({f.count})</Button>)}</div>
       </div>
 
-      {/* Grid */}
+      {/* Accordion por Montador */}
       {filtered.length === 0 ? (
         <Card><CardContent className="py-16 text-center"><Zap className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" /><p className="text-lg font-medium text-muted-foreground">{montadores.length === 0 ? "Nenhum montador com envio automático" : "Nenhum resultado"}</p></CardContent></Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(m => {
-            const isPronto = m.badge === "pronto", isAguardando = m.badge === "aguardando";
-            const bc = isPronto ? "border-l-green-500" : isAguardando ? "border-l-amber-500" : "border-l-gray-300";
-            const Icon = isPronto ? CheckCircle2 : isAguardando ? Clock : Package;
-            const ic = isPronto ? "text-green-500" : isAguardando ? "text-amber-500" : "text-gray-400";
-            return (
-              <Card key={m.id} className={`cursor-pointer hover:shadow-lg transition-all border-l-4 ${bc} hover:-translate-y-0.5`} onClick={() => setSelectedId(m.id)}>
-                <CardHeader className="pb-2"><div className="flex items-center justify-between"><CardTitle className="text-base truncate">{m.nome}</CardTitle><Badge variant={isPronto ? "default" : isAguardando ? "outline" : "secondary"} className="text-xs">{m.badge_label}</Badge></div></CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm"><Calendar className="h-4 w-4 text-muted-foreground shrink-0" /><span className="text-muted-foreground">Dias: {m.dias_envio?.length ? m.dias_envio.join(", ") : "—"}</span></div>
-                  <div className="flex items-center gap-2"><Icon className={`h-5 w-5 ${ic}`} /><span className="text-lg font-semibold">{m.qtd_pendentes}</span><span className="text-sm text-muted-foreground">pendentes</span></div>
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t"><div><p className="text-xs text-muted-foreground">Vendas</p><p className="text-sm font-semibold">{fmt(m.total_venda)}</p></div><div><p className="text-xs text-muted-foreground">Comissão</p><p className="text-sm font-semibold text-green-700">{fmt(m.total_comissao)}</p></div></div>
-                  {m.tipo_pagamento === "terceirizada" && m.terceirizada_nome && <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded"><ArrowRight className="h-3 w-3" /> Via: {m.terceirizada_nome}</div>}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-1"><span>{fd(m.periodo_inicio)} → {fd(m.periodo_fim)}</span><Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={e => { e.stopPropagation(); setSelectedId(m.id); }}><Eye className="h-3 w-3" /> Abrir</Button></div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="space-y-3">
+          {(() => {
+            // Agrupar por montador (nome + id)
+            const grupos = new Map<string, MontadorResumo[]>();
+            for (const m of filtered) {
+              const key = `${m.nome}__${m.id}`;
+              if (!grupos.has(key)) grupos.set(key, []);
+              grupos.get(key)!.push(m);
+            }
+            // Ordenar ciclos dentro de cada grupo: mais antigo primeiro
+            for (const [key, ciclos] of grupos) {
+              ciclos.sort((a, b) => a.periodo_inicio.localeCompare(b.periodo_inicio));
+            }
+            return Array.from(grupos.entries()).map(([key, ciclos]) => {
+              const nome = ciclos[0].nome;
+              const isOpen = openMontadores.has(key);
+              const totalPendentes = ciclos.reduce((s, c) => s + c.qtd_pendentes, 0);
+              const totalVenda = ciclos.reduce((s, c) => s + c.total_venda, 0);
+              const totalComissao = ciclos.reduce((s, c) => s + c.total_comissao, 0);
+              const hasPronto = ciclos.some(c => c.badge === "pronto");
+
+              return (
+                <Card key={key} className={hasPronto ? "border-l-4 border-l-green-500" : ""}>
+                  {/* Header do Montador */}
+                  <div
+                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30"
+                    onClick={() => {
+                      const next = new Set(openMontadores);
+                      if (next.has(key)) next.delete(key); else next.add(key);
+                      setOpenMontadores(next);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isOpen ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+                      <div>
+                        <h3 className="font-semibold text-lg">{nome}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          {ciclos.length} ciclo(s) · {totalPendentes} boletins pendentes · Vendas {fmt(totalVenda)} · Comissão {fmt(totalComissao)}
+                          {ciclos[0].tipo_pagamento === "terceirizada" && ciclos[0].terceirizada_nome && (
+                            <span className="ml-2 text-blue-600">Via: {ciclos[0].terceirizada_nome}</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {hasPronto && <Badge className="bg-green-500 text-xs">Pronto</Badge>}
+                      <Badge variant="outline" className="text-xs">{ciclos[0].dias_envio?.join(", ")}</Badge>
+                    </div>
+                  </div>
+
+                  {/* Ciclos (expandido) */}
+                  {isOpen && (
+                    <div className="border-t px-4 py-3 space-y-2 bg-muted/20">
+                      {(() => {
+                        const fechados = ciclos.filter(c => c.badge === "fechado");
+                        const ativos = ciclos.filter(c => c.badge !== "fechado");
+                        
+                        // Card mesclado de ciclos fechados
+                        const mesclado = fechados.length > 0 ? {
+                          qtd: fechados.reduce((s, c) => s + c.qtd_pendentes, 0),
+                          venda: fechados.reduce((s, c) => s + c.total_venda, 0),
+                          comissao: fechados.reduce((s, c) => s + c.total_comissao, 0),
+                          ate: fechados[fechados.length - 1]?.periodo_fim,
+                          ciclos: fechados.length,
+                        } : null;
+
+                        return (
+                          <>
+                            {/* Card mesclado */}
+                            {mesclado && (
+                              <div className="flex items-center justify-between p-3 rounded border-l-4 border-l-red-400 bg-red-50/40 cursor-pointer hover:shadow-sm transition-shadow"
+                                onClick={() => { setSelectedId(ciclos[0].id); setSelectedPeriodoInicio("2020-01-01"); setSelectedPeriodoFim(mesclado.ate); }}>
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">{mesclado.ciclos} ciclos vencidos (até {fd(mesclado.ate)})</span>
+                                      <Badge variant="destructive" className="text-xs">Não enviado</Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 shrink-0 ml-4">
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold">{mesclado.qtd} bol.</p>
+                                    <p className="text-xs text-muted-foreground">{fmt(mesclado.venda)}</p>
+                                  </div>
+                                  <Button variant="destructive" size="sm" className="h-7 text-xs gap-1" onClick={e => { e.stopPropagation(); setSelectedId(ciclos[0].id); setSelectedPeriodoInicio("2020-01-01"); setSelectedPeriodoFim(mesclado.ate); }}>
+                                    <Send className="h-3 w-3" /> Enviar Tudo
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Cards individuais (aguardando/pronto) */}
+                            {ativos.map((c, idx) => {
+                              const isPronto = c.badge === "pronto";
+                              const isAguardando = c.badge === "aguardando";
+                              const bc = isPronto ? "border-l-green-500 bg-green-50/40" : "border-l-amber-500 bg-amber-50/40";
+                              const Icon = isPronto ? CheckCircle2 : Clock;
+                              const ic = isPronto ? "text-green-500" : "text-amber-500";
+                              return (
+                                <div key={idx}
+                                  className={`flex items-center justify-between p-3 rounded border-l-4 ${bc} cursor-pointer hover:shadow-sm transition-shadow`}
+                                  onClick={() => { setSelectedId(c.id); setSelectedPeriodoInicio(c.periodo_inicio); setSelectedPeriodoFim(c.periodo_fim); }}>
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <Icon className={`h-5 w-5 shrink-0 ${ic}`} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">{fd(c.periodo_inicio)} → {fd(c.periodo_fim)}</span>
+                                        <Badge variant={isPronto ? "default" : "outline"} className="text-xs">{c.badge_label}</Badge>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4 shrink-0 ml-4">
+                                    <div className="text-right">
+                                      <p className="text-sm font-semibold">{c.qtd_pendentes} bol.</p>
+                                      <p className="text-xs text-muted-foreground">{fmt(c.total_venda)}</p>
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={e => { e.stopPropagation(); setSelectedId(c.id); setSelectedPeriodoInicio(c.periodo_inicio); setSelectedPeriodoFim(c.periodo_fim); }}>
+                                      <Eye className="h-3 w-3" /> Abrir
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </Card>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

@@ -33,7 +33,7 @@ class MontadorBase(BaseModel):
     dia_envio_1: Optional[int] = None
     dia_envio_2: Optional[int] = None
     # Novos campos - Envio Automático
-    envio_automatico: bool = False
+    envio_automatico: bool = True
     dia_fechamento: int = 25
     dias_envio_mes: Optional[List[int]] = None
     prazo_pagamento_dias: int = 10
@@ -41,6 +41,8 @@ class MontadorBase(BaseModel):
     # Novos campos - Terceirizada
     tipo_pagamento: str = "novo_mundo"
     terceirizada_id: Optional[int] = None
+    # Template de email
+    email_template_id: Optional[int] = None
 
 class MontadorCreate(MontadorBase):
     pass
@@ -73,6 +75,8 @@ class MontadorUpdate(BaseModel):
     # Novos campos - Terceirizada
     tipo_pagamento: Optional[str] = None
     terceirizada_id: Optional[int] = None
+    # Template de email
+    email_template_id: Optional[int] = None
 
 @router.get("")
 def listar_montadores(
@@ -134,9 +138,9 @@ def criar_montador(montador: MontadorCreate):
                  tempo_vencimento_dias, emails_adicionais, filial, localidade,
                  dia_envio_1, dia_envio_2,
                  envio_automatico, dia_fechamento, dias_envio_mes, prazo_pagamento_dias,
-                 email_responsavel_nm, tipo_pagamento, terceirizada_id)
+                 email_responsavel_nm, tipo_pagamento, terceirizada_id, email_template_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -165,7 +169,8 @@ def criar_montador(montador: MontadorCreate):
                     montador.prazo_pagamento_dias,
                     montador.email_responsavel_nm,
                     montador.tipo_pagamento,
-                    montador.terceirizada_id
+                    montador.terceirizada_id,
+                    montador.email_template_id
                 )
             )
             montador_id = cur.fetchone()[0]

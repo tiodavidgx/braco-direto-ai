@@ -17,7 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.database import init_db
 from app.utils.rate_limit import limiter
-from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications, sistema_auth, custos_extras, mms, pre_cadastro, gestao_pagamentos, lancamentos_motorista, dados_bot, crm, montagem, ingestao, terceirizadas, aprovacoes, auto_envio_routes
+from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications, sistema_auth, custos_extras, mms, pre_cadastro, gestao_pagamentos, lancamentos_motorista, dados_bot, crm, montagem, ingestao, terceirizadas, aprovacoes, auto_envio_routes, email_templates
 
 # Carregar .env do diretório do projeto (backend_example/) independente do CWD
 _env_path = Path(__file__).resolve().parent.parent / '.env'
@@ -290,6 +290,12 @@ app.include_router(
     auto_envio_routes.router, 
     prefix="/api/v1/auto-envio", 
     tags=["Envio Automático"]
+)
+
+app.include_router(
+    email_templates.router,
+    prefix="/api/v1/email-templates",
+    tags=["Templates de Email"]
 )
 
 # Tratamento de erros globais

@@ -313,7 +313,8 @@ def verificar_boletins_enviados(request: dict):
 @router.get("/email-config/{tipo}")
 def get_email_config(tipo: str):
     """
-    Busca a última configuração de email salva para o tipo (prestador ou montador)
+    Busca a configuração de email DEFAULT para o tipo (prestador ou montador)
+    Mantido para compatibilidade com as páginas manuais de envio.
     """
     from app.database import get_db_connection
     import psycopg2.extras
@@ -324,15 +325,26 @@ def get_email_config(tipo: str):
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT assunto, corpo, cc, atualizado_em
+            SELECT assunto, corpo, cc, atualizado_em, id, nome
             FROM email_config
-            WHERE tipo = %s
+            WHERE tipo = %s AND is_default = TRUE AND ativo = TRUE
+            LIMIT 1
         """, (tipo,))
         
         config = cur.fetchone()
         
         if not config:
-            # Retornar config padrão se não existir
+            # Tentar qualquer template ativo
+            cur.execute("""
+                SELECT assunto, corpo, cc, atualizado_em, id, nome
+                FROM email_config
+                WHERE tipo = %s AND ativo = TRUE
+                ORDER BY id LIMIT 1
+            """, (tipo,))
+            config = cur.fetchone()
+        
+        if not config:
+            # Retornar config padrão se não existir nenhum
             if tipo == "prestador":
                 return {
                     "assunto": "Novo Mundo Resolve | Nota Fiscal | Período: {{periodo}} | Prestador: {{nome_prestador}}",
@@ -364,14 +376,8 @@ Qualquer dúvida, estamos à disposição.""",
 @router.post("/email-config/{tipo}")
 def save_email_config(tipo: str, config: dict):
     """
-    Salva a configuração de email para o tipo (prestador ou montador)
-    
-    Body:
-        {
-            "assunto": "...",
-            "corpo": "...",
-            "cc": "..."
-        }
+    Salva/atualiza a configuração DEFAULT de email para o tipo.
+    Mantido para compatibilidade com as páginas manuais de envio.
     """
     from app.database import get_db_connection
     import psycopg2.extras
@@ -389,17 +395,24 @@ def save_email_config(tipo: str, config: dict):
     with get_db_connection() as conn:
         cur = conn.cursor()
         
-        # Inserir ou atualizar
-        cur.execute("""
-            INSERT INTO email_config (tipo, assunto, corpo, cc, atualizado_em)
-            VALUES (%s, %s, %s, %s, NOW())
-            ON CONFLICT (tipo) 
-            DO UPDATE SET 
-                assunto = EXCLUDED.assunto,
-                corpo = EXCLUDED.corpo,
-                cc = EXCLUDED.cc,
-                atualizado_em = NOW()
-        """, (tipo, assunto, corpo, cc))
+        # Buscar o template default do tipo
+        cur.execute("SELECT id FROM email_config WHERE tipo = %s AND is_default = TRUE LIMIT 1", (tipo,))
+        existing = cur.fetchone()
+        
+        if existing:
+            # Atualizar template default existente
+            cur.execute("""
+                UPDATE email_config 
+                SET assunto = %s, corpo = %s, cc = %s, atualizado_em = NOW()
+                WHERE id = %s
+            """, (assunto, corpo, cc, existing[0]))
+        else:
+            # Criar novo template default
+            nome = "Padrão Prestador" if tipo == "prestador" else "Padrão Montador"
+            cur.execute("""
+                INSERT INTO email_config (tipo, nome, assunto, corpo, cc, is_default, ativo)
+                VALUES (%s, %s, %s, %s, %s, TRUE, TRUE)
+            """, (tipo, nome, assunto, corpo, cc))
         
         conn.commit()
     
@@ -1240,17 +1253,29 @@ def enviar_lote_relatorios(request: dict):
     if not dados:
         raise HTTPException(status_code=400, detail="Nenhum dado para enviar")
     
-    # Se não vier emailConfig no request, buscar do banco
+    # Se não vier emailConfig no request, buscar do banco (template default)
     if not email_config or not email_config.get('assunto') or not email_config.get('corpo'):
         with get_db_connection() as conn:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            # Buscar template default do tipo
             cur.execute("""
                 SELECT assunto, corpo, cc
                 FROM email_config
-                WHERE tipo = %s
+                WHERE tipo = %s AND is_default = TRUE AND ativo = TRUE
+                LIMIT 1
             """, (tipo,))
             
             config_db = cur.fetchone()
+            if not config_db:
+                # Fallback: qualquer template ativo do tipo
+                cur.execute("""
+                    SELECT assunto, corpo, cc
+                    FROM email_config
+                    WHERE tipo = %s AND ativo = TRUE
+                    ORDER BY id LIMIT 1
+                """, (tipo,))
+                config_db = cur.fetchone()
+            
             if config_db:
                 email_config = dict(config_db)
                 print(f"📧 Usando configuração de email salva do banco")

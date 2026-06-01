@@ -24,6 +24,14 @@ export interface Montador {
   cidade?: string;
   dia_envio_1?: number;
   dia_envio_2?: number;
+  envio_automatico?: boolean;
+  dia_fechamento?: number;
+  dias_envio_mes?: number[];
+  prazo_pagamento_dias?: number;
+  email_responsavel_nm?: string;
+  tipo_pagamento?: string;
+  terceirizada_id?: number | null;
+  email_template_id?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +55,14 @@ export interface MontadorCreate {
   cidade?: string;
   dia_envio_1?: number;
   dia_envio_2?: number;
+  envio_automatico?: boolean;
+  dia_fechamento?: number;
+  dias_envio_mes?: number[];
+  prazo_pagamento_dias?: number;
+  email_responsavel_nm?: string;
+  tipo_pagamento?: string;
+  terceirizada_id?: number | null;
+  email_template_id?: number | null;
 }
 
 export interface MontadorUpdate extends Partial<MontadorCreate> {}

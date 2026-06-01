@@ -62,12 +62,13 @@ def criar_tabela_jobs_config():
             WHERE nome = 'trello_montadores'
         """)
         
-        # Inserir/atualizar job de envio automático de montadores
+        # Inserir/atualizar job de envio automático de montadores (só pré-aprovados)
         cursor.execute("""
             INSERT INTO jobs_config (nome, descricao, ativo, intervalo_minutos)
-            VALUES ('auto_envio_montadores', 'Envio automático de relatórios de montadores nos dias configurados (dias_envio_mes)', TRUE, 1440)
+            VALUES ('auto_envio_montadores', 'Envio automático APENAS de montadores pré-aprovados nos dias configurados', TRUE, 1440)
             ON CONFLICT (nome) DO UPDATE SET
-                descricao = 'Envio automático de relatórios de montadores nos dias configurados (dias_envio_mes)'
+                descricao = 'Envio automático APENAS de montadores pré-aprovados nos dias configurados',
+                ativo = TRUE
         """)
         
         conn.commit()
@@ -214,15 +215,15 @@ def configurar_jobs():
     else:
         logger.info(f"⏸️  Job 'crm_whatsapp_diario' desativado ou não configurado")
 
-    # Job Envio Automático de Montadores
+    # Job Envio Automático de Montadores (só pré-aprovados)
     auto_envio_config = carregar_configuracao_job('auto_envio_montadores')
     if auto_envio_config and auto_envio_config['ativo']:
-        from app.services.auto_envio import processar_envios_automaticos_montadores
+        from app.services.auto_envio import processar_envios_pre_aprovados
         scheduler.add_job(
-            processar_envios_automaticos_montadores,
+            processar_envios_pre_aprovados,
             trigger=IntervalTrigger(minutes=auto_envio_config['intervalo_minutos']),
             id='auto_envio_montadores',
-            name='Envio Automático Montadores',
+            name='Envio Automático Montadores (Pré-aprovados)',
             replace_existing=True,
             max_instances=1,
         )

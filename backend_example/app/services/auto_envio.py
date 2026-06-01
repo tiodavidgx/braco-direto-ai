@@ -6,7 +6,7 @@ Job que processa boletins pendentes e envia via endpoint HTTP interno
 import os
 import requests
 from datetime import datetime, date
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import psycopg2.extras
 from app.database import get_db_connection
 
@@ -33,47 +33,118 @@ def _get_internal_auth_header() -> Dict[str, str]:
     return headers
 
 
-def _buscar_email_config(tipo: str = "montador") -> Dict[str, str]:
-    """Busca configuração de email do banco"""
+def _buscar_email_config(tipo: str = "montador", template_id: int = None) -> Dict[str, str]:
+    """Busca configuração de email do banco. Se template_id informado, usa ele; senão usa o default do tipo."""
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        if template_id:
+            cur.execute(
+                "SELECT assunto, corpo, cc FROM email_config WHERE id = %s AND ativo = TRUE",
+                (template_id,)
+            )
+            config = cur.fetchone()
+            if config:
+                return {
+                    "cc": config.get("cc", ""),
+                    "assunto": config.get("assunto", ""),
+                    "corpo": config.get("corpo", ""),
+                    "template_id": template_id,
+                }
+        
+        # Fallback: template default do tipo
         cur.execute(
-            "SELECT assunto, corpo, cc FROM email_config WHERE tipo = %s LIMIT 1",
+            "SELECT assunto, corpo, cc, id FROM email_config WHERE tipo = %s AND is_default = TRUE AND ativo = TRUE LIMIT 1",
             (tipo,)
         )
         config = cur.fetchone()
+        if not config:
+            cur.execute(
+                "SELECT assunto, corpo, cc, id FROM email_config WHERE tipo = %s AND ativo = TRUE ORDER BY id LIMIT 1",
+                (tipo,)
+            )
+            config = cur.fetchone()
+        
         if config:
             return {
                 "cc": config.get("cc", ""),
                 "assunto": config.get("assunto", ""),
                 "corpo": config.get("corpo", ""),
+                "template_id": config.get("id"),
             }
         return {
             "cc": "",
             "assunto": "Relatório de Pagamento de Montagem - Período: {{periodo_relatorio}}",
             "corpo": "Segue em anexo o relatório de pagamento de montagens.",
+            "template_id": None,
         }
 
 
-def processar_envios_automaticos_montadores(dry_run: bool = False) -> Dict[str, Any]:
+def processar_envios_pre_aprovados() -> Dict[str, Any]:
     """
-    Processa envios automáticos para todos os montadores com envio_automatico=TRUE
-    e cujo dia de hoje está no array dias_envio_mes.
-    
-    Args:
-        dry_run: Se True, apenas simula (não envia emails/WhatsApp de verdade)
-    
-    Returns:
-        Dict com sumário da execução
+    Job scheduler: verifica montadores pré-aprovados cujo dia de envio é hoje.
+    Se encontrar, dispara o envio automático.
     """
     hoje = date.today()
     dia_hoje = hoje.day
-    mes_atual = hoje.month
-    ano_atual = hoje.year
+    
+    with get_db_connection() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Buscar montadores pré-aprovados com hoje no dias_envio_mes
+        cur.execute("""
+            SELECT id, nome FROM montadores 
+            WHERE envio_automatico = TRUE 
+              AND ativo = TRUE
+              AND pre_aprovado_em IS NOT NULL
+              AND %s = ANY(dias_envio_mes)
+        """, (dia_hoje,))
+        
+        montadores = cur.fetchall()
+        
+        if not montadores:
+            return {"status": "ok", "mensagem": f"Nenhum montador pré-aprovado para hoje (dia {dia_hoje})"}
+        
+        resultado = {"processados": 0, "erros": 0, "detalhes": []}
+        
+        for m in montadores:
+            try:
+                resp = processar_envios_automaticos_montadores(
+                    dry_run=False, montador_id=m['id']
+                )
+                # Limpar pré-aprovação após envio
+                cur.execute(
+                    "UPDATE montadores SET pre_aprovado_em = NULL WHERE id = %s",
+                    (m['id'],)
+                )
+                conn.commit()
+                resultado["processados"] += 1
+                resultado["detalhes"].append({"montador": m['nome'], "status": "enviado", "resumo": resp})
+            except Exception as e:
+                resultado["erros"] += 1
+                resultado["detalhes"].append({"montador": m['nome'], "status": "erro", "erro": str(e)})
+                conn.rollback()
+        
+        return resultado
+
+
+def processar_envios_automaticos_montadores(dry_run: bool = False, montador_id: int = None, ate_data: date = None) -> Dict[str, Any]:
+    """
+    Processa envios automáticos para montadores.
+    
+    Args:
+        dry_run: Se True, apenas simula
+        montador_id: Se informado, processa apenas este montador
+        ate_data: Se informado, envia boletins até esta data (mescla ciclos vencidos)
+    """
+    hoje = date.today()
+    dia_hoje = hoje.day
+    forcando_vencido = ate_data is not None  # True quando é envio manual de ciclo vencido
     
     resultado = {
         "data_execucao": hoje.isoformat(),
         "dry_run": dry_run,
+        "ate_data": ate_data.isoformat() if ate_data else None,
         "montadores_processados": 0,
         "montadores_sem_boletins": 0,
         "total_boletins_enviados": 0,
@@ -84,25 +155,44 @@ def processar_envios_automaticos_montadores(dry_run: bool = False) -> Dict[str, 
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Buscar montadores com envio automático ativo e hoje nos dias de envio
-        cur.execute("""
-            SELECT * FROM montadores 
-            WHERE envio_automatico = TRUE 
-              AND ativo = TRUE
-              AND %s = ANY(dias_envio_mes)
-        """, (dia_hoje,))
+        # Buscar montadores
+        if forcando_vencido:
+            # Envio de ciclo vencido: não precisa checar dia de envio
+            query = """
+                SELECT * FROM montadores 
+                WHERE envio_automatico = TRUE AND ativo = TRUE
+            """
+            params = []
+        else:
+            query = """
+                SELECT * FROM montadores 
+                WHERE envio_automatico = TRUE 
+                  AND ativo = TRUE
+                  AND %s = ANY(dias_envio_mes)
+            """
+            params = [dia_hoje]
+        
+        if montador_id:
+            query += " AND id = %s"
+            params.append(montador_id)
+        
+        cur.execute(query, params)
         
         montadores = cur.fetchall()
         
         if not montadores:
-            resultado["mensagem"] = f"Nenhum montador com envio agendado para hoje (dia {dia_hoje})"
+            resultado["mensagem"] = f"Nenhum montador encontrado"
             return resultado
         
         for montador in montadores:
             try:
-                # Calcular período do ciclo atual baseado nos dias de envio
                 dias_envio = montador.get('dias_envio_mes') or []
-                data_inicio, data_fim = _calcular_periodo_ciclo(dias_envio, hoje)
+                
+                if ate_data:
+                    data_inicio = date(2020, 1, 1)
+                    data_fim = ate_data
+                else:
+                    data_inicio, data_fim = _calcular_periodo_ciclo(dias_envio, hoje)
                 
                 # Buscar boletins pendentes
                 cur.execute("""
@@ -171,8 +261,9 @@ def processar_envios_automaticos_montadores(dry_run: bool = False) -> Dict[str, 
                         "is_ajuste": True,
                     })
                 
-                # Email config com CC do responsável NM
-                email_config = _buscar_email_config("montador")
+                # Email config com CC do responsável NM e template do montador
+                template_id = montador.get('email_template_id')
+                email_config = _buscar_email_config("montador", template_id)
                 if montador.get('email_responsavel_nm'):
                     cc_atual = email_config.get('cc', '')
                     if cc_atual:
@@ -209,25 +300,36 @@ def processar_envios_automaticos_montadores(dry_run: bool = False) -> Dict[str, 
                 if response.status_code == 200:
                     resp_data = response.json()
                     
-                    # Atualizar status dos boletins
-                    for b in boletins:
-                        cur.execute("""
-                            UPDATE ingestao_boletins_montador
-                            SET status = 'processado', lote_envio_id = %s, updated_at = NOW()
-                            WHERE id = %s
-                        """, (resp_data.get('lote_id'), b['id']))
+                    # Só marcar como processado se o envio realmente deu certo
+                    sucessos = resp_data.get('sucesso', 0)
+                    erros_envio = resp_data.get('erros', 0)
                     
-                    conn.commit()
-                    
-                    resultado["montadores_processados"] += 1
-                    resultado["total_boletins_enviados"] += len(boletins)
-                    resultado["detalhes"].append({
-                        "montador": montador['nome'],
-                        "status": "enviado",
-                        "qtd_boletins": len(boletins),
-                        "sucesso": resp_data.get('sucesso', 0),
-                        "erros_envio": resp_data.get('erros', 0),
-                    })
+                    if sucessos > 0:
+                        for b in boletins:
+                            cur.execute("""
+                                UPDATE ingestao_boletins_montador
+                                SET status = 'processado', lote_envio_id = %s, updated_at = NOW()
+                                WHERE id = %s
+                            """, (resp_data.get('lote_id'), b['id']))
+                        
+                        conn.commit()
+                        
+                        resultado["montadores_processados"] += 1
+                        resultado["total_boletins_enviados"] += len(boletins)
+                        resultado["detalhes"].append({
+                            "montador": montador['nome'],
+                            "status": "enviado",
+                            "qtd_boletins": len(boletins),
+                            "sucesso": sucessos,
+                            "erros_envio": erros_envio,
+                        })
+                    else:
+                        resultado["erros"] += 1
+                        resultado["detalhes"].append({
+                            "montador": montador['nome'],
+                            "status": "erro",
+                            "erro": f"Envio falhou: {sucessos} sucessos, {erros_envio} erros",
+                        })
                 else:
                     resultado["erros"] += 1
                     resultado["detalhes"].append({

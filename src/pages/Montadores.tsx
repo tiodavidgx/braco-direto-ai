@@ -22,8 +22,10 @@ import { montadoresService } from "@/services/montadores.service";
 import { blacklistService, BoletimBlacklistItem } from "@/services/blacklist.service";
 import { apiClient } from "@/services/api";
 import { Montador } from "@/types/montador";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Montadores() {
+  const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [blacklistItems, setBlacklistItems] = useState<BoletimBlacklistItem[]>([]);
   const [montadorSelecionado, setMontadorSelecionado] = useState<number | null>(null);
@@ -57,20 +59,24 @@ export default function Montadores() {
   const [formDiaEnvio1, setFormDiaEnvio1] = useState("");
   const [formDiaEnvio2, setFormDiaEnvio2] = useState("");
   // Novos campos - Envio Automático
-  const [formEnvioAutomatico, setFormEnvioAutomatico] = useState(false);
+  const [formEnvioAutomatico, setFormEnvioAutomatico] = useState(true);
   const [formDiaFechamento, setFormDiaFechamento] = useState("25");
-  const [formDiasEnvioMes, setFormDiasEnvioMes] = useState<number[]>([]);
+  const [formDiasEnvioMes, setFormDiasEnvioMes] = useState<number[]>([16, 26]);
   const [formPrazoPagamento, setFormPrazoPagamento] = useState("10");
   const [formEmailResponsavelNM, setFormEmailResponsavelNM] = useState("");
   // Novos campos - Terceirizada
   const [formTipoPagamento, setFormTipoPagamento] = useState("novo_mundo");
   const [formTerceirizadaId, setFormTerceirizadaId] = useState<number | null>(null);
   const [terceirizadasLista, setTerceirizadasLista] = useState<any[]>([]);
+  // Template de email
+  const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
+  const [formEmailTemplateId, setFormEmailTemplateId] = useState<number | null>(null);
 
   useEffect(() => {
     carregarBlacklist();
     carregarMontadores();
     carregarTerceirizadas();
+    carregarEmailTemplates();
   }, []);
 
   const carregarTerceirizadas = async () => {
@@ -79,6 +85,15 @@ export default function Montadores() {
       setTerceirizadasLista(data || []);
     } catch (error) {
       console.error("Erro ao carregar terceirizadas:", error);
+    }
+  };
+
+  const carregarEmailTemplates = async () => {
+    try {
+      const res = await apiClient.get<{ data: any[] }>("/email-templates?tipo=montador&ativo=true");
+      setEmailTemplates(res.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar templates de email:", error);
     }
   };
 
@@ -198,6 +213,7 @@ export default function Montadores() {
         email_responsavel_nm: formEmailResponsavelNM || null,
         tipo_pagamento: formTipoPagamento,
         terceirizada_id: formTerceirizadaId,
+        email_template_id: formEmailTemplateId,
       });
 
       toast.success("Montador adicionado com sucesso!");
@@ -219,13 +235,14 @@ export default function Montadores() {
       setFormCidade("");
       setFormDiaEnvio1("");
       setFormDiaEnvio2("");
-      setFormEnvioAutomatico(false);
+      setFormEnvioAutomatico(true);
       setFormDiaFechamento("25");
-      setFormDiasEnvioMes([]);
+      setFormDiasEnvioMes([16, 26]);
       setFormPrazoPagamento("10");
       setFormEmailResponsavelNM("");
       setFormTipoPagamento("novo_mundo");
       setFormTerceirizadaId(null);
+      setFormEmailTemplateId(null);
       // Recarregar lista
       carregarMontadores();
     } catch (error: any) {
@@ -255,13 +272,14 @@ export default function Montadores() {
     setFormAtivo(montador.ativo ?? true);
     setFormDiaEnvio1(montador.dia_envio_1?.toString() || "");
     setFormDiaEnvio2(montador.dia_envio_2?.toString() || "");
-    setFormEnvioAutomatico(montador.envio_automatico ?? false);
+    setFormEnvioAutomatico(true);
     setFormDiaFechamento((montador.dia_fechamento ?? 25).toString());
-    setFormDiasEnvioMes(montador.dias_envio_mes || []);
+    setFormDiasEnvioMes(montador.dias_envio_mes?.length ? montador.dias_envio_mes : [16, 26]);
     setFormPrazoPagamento((montador.prazo_pagamento_dias ?? 10).toString());
     setFormEmailResponsavelNM(montador.email_responsavel_nm || "");
     setFormTipoPagamento(montador.tipo_pagamento || "novo_mundo");
     setFormTerceirizadaId(montador.terceirizada_id || null);
+    setFormEmailTemplateId((montador as any).email_template_id || null);
     setEditDialogOpen(true);
   };
 
@@ -285,6 +303,7 @@ export default function Montadores() {
     setFormAtivo(true);
     setFormDiaEnvio1("");
     setFormDiaEnvio2("");
+    setFormEmailTemplateId(null);
     setMontadorEditando(null);
   };
 
@@ -315,6 +334,14 @@ export default function Montadores() {
         ativo: formAtivo,
         dia_envio_1: formDiaEnvio1 ? parseInt(formDiaEnvio1) : null,
         dia_envio_2: formDiaEnvio2 ? parseInt(formDiaEnvio2) : null,
+        envio_automatico: formEnvioAutomatico,
+        dia_fechamento: parseInt(formDiaFechamento) || 25,
+        dias_envio_mes: formDiasEnvioMes,
+        prazo_pagamento_dias: parseInt(formPrazoPagamento) || 10,
+        email_responsavel_nm: formEmailResponsavelNM || null,
+        tipo_pagamento: formTipoPagamento,
+        terceirizada_id: formTerceirizadaId,
+        email_template_id: formEmailTemplateId,
       });
 
       toast.success("Montador atualizado com sucesso!");
@@ -542,48 +569,59 @@ export default function Montadores() {
                   />
               </div>
 
-              {/* Envio Automático */}
+              {/* Envio Automático — sempre ativo */}
               <div className="border rounded-md p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="font-medium">Envio Automático</Label>
-                  <Switch
-                    checked={formEnvioAutomatico}
-                    onCheckedChange={setFormEnvioAutomatico}
-                  />
-                </div>
-
-                {formEnvioAutomatico && (
-                  <>
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Dias de Envio (selecione um ou mais)</Label>
-                      <div className="grid grid-cols-7 gap-1">
-                        {Array.from({length: 28}, (_, i) => i + 1).map(d => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => {
-                              setFormDiasEnvioMes(prev =>
-                                prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a,b) => a-b)
-                              );
-                            }}
-                            className={`h-7 text-xs rounded border transition-colors ${
-                              formDiasEnvioMes.includes(d)
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background hover:bg-muted border-input"
-                            }`}
-                          >
-                            {d}
-                          </button>
-                        ))}
-                      </div>
-                      {formDiasEnvioMes.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          Selecionados: {formDiasEnvioMes.join(", ")}
-                        </p>
-                      )}
+                <Label className="font-medium">Envio Automático</Label>
+                <div className="grid gap-1">
+                    <Label className="text-xs">Dias de Envio (selecione um ou mais)</Label>
+                    <div className="grid grid-cols-7 gap-1">
+                      {Array.from({length: 28}, (_, i) => i + 1).map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            if (!isAdmin) { toast.error("Solicite para um administrador a alteração da data de envio"); return; }
+                            setFormDiasEnvioMes(prev =>
+                              prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a,b) => a-b)
+                            );
+                          }}
+                          className={`h-7 text-xs rounded border transition-colors ${
+                            formDiasEnvioMes.includes(d)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background hover:bg-muted border-input"
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
                     </div>
-                  </>
-                )}
+                    {formDiasEnvioMes.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Selecionados: {formDiasEnvioMes.join(", ")}
+                      </p>
+                    )}
+                
+                {/* Template de Email */}
+                <div>
+                  <Label className="text-xs">Template de Email</Label>
+                  <Select 
+                    value={formEmailTemplateId?.toString() || "__default__"} 
+                    onValueChange={(v) => setFormEmailTemplateId(v === "__default__" ? null : parseInt(v))}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Template padrão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__default__">Padrão Montador</SelectItem>
+                      {emailTemplates.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id.toString()}>
+                          {t.nome} {t.is_default ? "(padrão)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               </div>
 
             </div>
@@ -915,29 +953,43 @@ export default function Montadores() {
                   />
                 </div>
 
-                {/* Envio Automático */}
+                {/* Envio Automático — sempre ativo */}
                 <div className="border rounded-md p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="font-medium">Envio Automático</Label>
-                    <Switch
-                      checked={formEnvioAutomatico}
-                      onCheckedChange={setFormEnvioAutomatico}
-                    />
+                  <Label className="font-medium">Envio Automático</Label>
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Dias de Envio</Label>
+                    <div className="grid grid-cols-7 gap-1">
+                      {Array.from({length: 28}, (_, i) => i + 1).map(d => (
+                        <button key={d} type="button" onClick={() => {
+                          if (!isAdmin) { toast.error("Solicite para um administrador a alteração da data de envio"); return; }
+                          setFormDiasEnvioMes(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a,b) => a-b))
+                        }}
+                          className={`h-7 text-xs rounded border ${formDiasEnvioMes.includes(d) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-input"}`}
+                        >{d}</button>
+                      ))}
+                    </div>
                   </div>
-                  {formEnvioAutomatico && (
-                    <>
-                      <div className="grid gap-1">
-                        <Label className="text-xs">Dias de Envio</Label>
-                        <div className="grid grid-cols-7 gap-1">
-                          {Array.from({length: 28}, (_, i) => i + 1).map(d => (
-                            <button key={d} type="button" onClick={() => setFormDiasEnvioMes(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a,b) => a-b))}
-                              className={`h-7 text-xs rounded border ${formDiasEnvioMes.includes(d) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-input"}`}
-                            >{d}</button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  
+                  {/* Template de Email */}
+                  <div>
+                    <Label className="text-xs">Template de Email</Label>
+                    <Select 
+                      value={formEmailTemplateId?.toString() || "__default__"} 
+                      onValueChange={(v) => setFormEmailTemplateId(v === "__default__" ? null : parseInt(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Template padrão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__default__">Padrão Montador</SelectItem>
+                        {emailTemplates.map((t: any) => (
+                          <SelectItem key={t.id} value={t.id.toString()}>
+                            {t.nome} {t.is_default ? "(padrão)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 

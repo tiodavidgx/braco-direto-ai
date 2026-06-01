@@ -5,7 +5,7 @@ Endpoints para o painel de envio automático e execução manual
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import Optional, List, Tuple
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import psycopg2.extras
 from app.database import get_db_connection
 from app.routes.sistema_auth import get_current_user
@@ -13,23 +13,51 @@ from app.routes.sistema_auth import get_current_user
 router = APIRouter()
 
 
-def calcular_periodo_ciclo(dias_envio: List[int], hoje: date) -> Tuple[date, date]:
+def gerar_ciclos(dias_envio: List[int], hoje: date) -> List[Tuple[date, date, bool]]:
     """
-    Calcula o período do ciclo: envia tudo pendente até hoje.
-    Não importa a data do boletim — se está pendente, vai.
-    A data de corte é sempre HOJE.
+    Gera todos os períodos entre dias de envio consecutivos.
+    Retorna lista de (data_inicio, data_fim, is_atual).
     
-    Ex: dias_envio=[16, 26], hoje=16/05 → ciclo: 01/01/2020 a 16/05
-        (envia tudo pendente até dia 16)
-    Ex: dias_envio=[16, 26], hoje=26/05 → ciclo: 01/01/2020 a 26/05
-        (envia tudo pendente até dia 26)
+    Ex: dias_envio=[16, 26], hoje=01/06 → ciclos:
+      [27/04→16/05, False], [17/05→26/05, False], [27/05→16/06, True]
     """
-    # Data de início: bem antiga para pegar tudo pendente
-    data_inicio = date(2020, 1, 1)
-    # Data fim: hoje (data de corte)
-    data_fim = hoje
+    if not dias_envio:
+        dias_envio = [25]
     
-    return data_inicio, data_fim
+    dias = sorted(dias_envio)
+    ciclos = []
+    
+    # Começar ~3 meses atrás
+    cursor = date(hoje.year, hoje.month, 1) - timedelta(days=90)
+    
+    # Ajustar cursor para depois do último dia de envio do mês anterior
+    # Encontrar o primeiro ciclo que comece antes ou durante o período de interesse
+    
+    while cursor <= hoje + timedelta(days=45):
+        # Encontrar próximo dia de envio a partir do cursor
+        proximo = None
+        for d in dias:
+            try:
+                candidate = date(cursor.year, cursor.month, min(d, 28))
+                if candidate >= cursor:
+                    if proximo is None or candidate < proximo:
+                        proximo = candidate
+            except ValueError:
+                pass
+        
+        if proximo is None:
+            # Avançar para dia 1 do próximo mês
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+            continue
+        
+        is_atual = cursor <= hoje <= proximo
+        ciclos.append((cursor, proximo, is_atual))
+        cursor = proximo + timedelta(days=1)
+    
+    return ciclos
 
 
 @router.get("/montadores/resumo")
@@ -37,8 +65,8 @@ def resumo_envio_automatico(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Retorna resumo de todos os montadores com envio automático ativo.
-    Usado pelo painel /envio-automatico-montadores (cards).
+    Retorna cards por ciclo de envio para cada montador.
+    Um card = um período entre dias de envio consecutivos.
     """
     hoje = date.today()
     dia_hoje = hoje.day
@@ -49,7 +77,7 @@ def resumo_envio_automatico(
         cur.execute("""
             SELECT 
                 m.id, m.nome, m.identificador,
-                m.dias_envio_mes, m.dia_fechamento, m.prazo_pagamento_dias,
+                m.dias_envio_mes, m.prazo_pagamento_dias,
                 m.email_responsavel_nm, m.percentual_montagem,
                 m.percentual_assistencia, m.percentual_desmontagem,
                 m.tipo_pagamento, m.terceirizada_id,
@@ -64,60 +92,59 @@ def resumo_envio_automatico(
         resultado = []
         
         for m in montadores:
-            # Calcular próximo dia de envio
             dias_envio = m.get('dias_envio_mes') or []
-            proximos_dias = [d for d in dias_envio if d >= dia_hoje]
-            if not proximos_dias and dias_envio:
-                proximos_dias = dias_envio  # Mostrar dias do próximo mês
+            ciclos = gerar_ciclos(dias_envio, hoje)
             
-            # Calcular período do ciclo atual
-            data_inicio, data_fim = calcular_periodo_ciclo(dias_envio, hoje)
-            
-            cur.execute("""
-                SELECT 
-                    COUNT(*) as qtd_pendentes,
-                    COALESCE(SUM(valor_venda), 0) as total_venda,
-                    COALESCE(SUM(comissao_calculada), 0) as total_comissao
-                FROM ingestao_boletins_montador
-                WHERE identificador_montador = %s
-                  AND status = 'pendente'
-                  AND data_montagem >= %s
-                  AND data_montagem <= %s
-            """, (m['identificador'], data_inicio, data_fim))
-            
-            stats = cur.fetchone()
-            
-            # Determinar badge
-            qtd = stats['qtd_pendentes'] or 0
-            if qtd == 0:
-                badge = "sem_boletins"
-                badge_label = "Sem boletins"
-            elif dia_hoje in dias_envio:
-                badge = "pronto"
-                badge_label = "Pronto para envio"
-            else:
-                badge = "aguardando"
-                badge_label = f"Aguardando dia {proximos_dias[0] if proximos_dias else '?'}"
-            
-            resultado.append({
-                "id": m['id'],
-                "nome": m['nome'],
-                "identificador": m['identificador'],
-                "dias_envio": dias_envio,
-                "proximos_dias": proximos_dias[:3],
-                "prazo_pagamento_dias": m.get('prazo_pagamento_dias', 10),
-                "email_responsavel_nm": m.get('email_responsavel_nm'),
-                "tipo_pagamento": m.get('tipo_pagamento', 'novo_mundo'),
-                "terceirizada_id": m.get('terceirizada_id'),
-                "terceirizada_nome": m.get('terceirizada_nome'),
-                "qtd_pendentes": qtd,
-                "total_venda": float(stats['total_venda'] or 0),
-                "total_comissao": float(stats['total_comissao'] or 0),
-                "periodo_inicio": data_inicio.isoformat(),
-                "periodo_fim": data_fim.isoformat(),
-                "badge": badge,
-                "badge_label": badge_label,
-            })
+            for data_inicio, data_fim, is_atual in ciclos:
+                # Contar boletins pendentes neste ciclo
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as qtd_pendentes,
+                        COALESCE(SUM(valor_venda), 0) as total_venda,
+                        COALESCE(SUM(comissao_calculada), 0) as total_comissao
+                    FROM ingestao_boletins_montador
+                    WHERE identificador_montador = %s
+                      AND status = 'pendente'
+                      AND data_montagem >= %s
+                      AND data_montagem <= %s
+                """, (m['identificador'], data_inicio, data_fim))
+                
+                stats = cur.fetchone()
+                qtd = stats['qtd_pendentes'] or 0
+                
+                # Só mostra ciclos com boletins pendentes
+                if qtd == 0:
+                    continue
+                
+                # Badge
+                if is_atual and dia_hoje in dias_envio:
+                    badge = "pronto"
+                    badge_label = "Pronto para envio"
+                elif is_atual:
+                    badge = "aguardando"
+                    badge_label = "Aguardando"
+                else:
+                    badge = "fechado"
+                    badge_label = "Ciclo fechado"
+                
+                resultado.append({
+                    "id": m['id'],
+                    "nome": m['nome'],
+                    "identificador": m['identificador'],
+                    "dias_envio": dias_envio,
+                    "prazo_pagamento_dias": m.get('prazo_pagamento_dias', 10),
+                    "email_responsavel_nm": m.get('email_responsavel_nm'),
+                    "tipo_pagamento": m.get('tipo_pagamento', 'novo_mundo'),
+                    "terceirizada_id": m.get('terceirizada_id'),
+                    "terceirizada_nome": m.get('terceirizada_nome'),
+                    "qtd_pendentes": qtd,
+                    "total_venda": float(stats['total_venda'] or 0),
+                    "total_comissao": float(stats['total_comissao'] or 0),
+                    "periodo_inicio": data_inicio.isoformat(),
+                    "periodo_fim": data_fim.isoformat(),
+                    "badge": badge,
+                    "badge_label": badge_label,
+                })
         
         return resultado
 
@@ -125,25 +152,31 @@ def resumo_envio_automatico(
 @router.get("/montadores/{montador_id}/boletins")
 def boletins_montador(
     montador_id: int,
+    data_inicio_param: Optional[str] = None,
+    data_fim_param: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """Retorna boletins pendentes detalhados de um montador específico"""
+    """Retorna boletins detalhados de um montador. Aceita período opcional."""
     hoje = date.today()
     
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Buscar montador
-        cur.execute(
-            "SELECT * FROM montadores WHERE id = %s",
-            (montador_id,)
-        )
+        cur.execute("SELECT * FROM montadores WHERE id = %s", (montador_id,))
         montador = cur.fetchone()
         if not montador:
             raise HTTPException(status_code=404, detail="Montador não encontrado")
         
-        dias_envio = montador.get('dias_envio_mes') or []
-        data_inicio, data_fim = calcular_periodo_ciclo(dias_envio, hoje)
+        # Período: parâmetros ou tudo pendente até hoje
+        if data_inicio_param:
+            data_inicio = date.fromisoformat(data_inicio_param)
+        else:
+            data_inicio = date(2020, 1, 1)
+        
+        if data_fim_param:
+            data_fim = date.fromisoformat(data_fim_param)
+        else:
+            data_fim = hoje
         
         cur.execute("""
             SELECT * FROM ingestao_boletins_montador
@@ -233,22 +266,73 @@ def remover_boletim(
 @router.post("/montadores/{montador_id}/forcar-envio")
 def forcar_envio_montador(
     montador_id: int,
-    background_tasks: BackgroundTasks,
+    ate_data: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """Força o envio imediato para um montador específico"""
+    """Força o envio para um montador. Se ate_data informado, mescla ciclos vencidos."""
     if current_user.get('role') != 'admin':
         raise HTTPException(status_code=403, detail="Apenas administradores")
     
     from app.services.auto_envio import processar_envios_automaticos_montadores
     
-    # Executar em background
-    background_tasks.add_task(processar_envios_automaticos_montadores, dry_run=False)
+    ate = None
+    if ate_data:
+        try:
+            ate = date.fromisoformat(ate_data)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Formato de data inválido. Use YYYY-MM-DD")
+    else:
+        # Sempre força com ate_data=hoje para ignorar a restrição de dia de envio
+        ate = date.today()
+    
+    # Executa síncrono para garantir que o envio aconteça
+    resultado = processar_envios_automaticos_montadores(dry_run=False, montador_id=montador_id, ate_data=ate)
     
     return {
-        "message": "Envio iniciado em background",
+        "message": "Envio concluído",
         "montador_id": montador_id,
+        "resultado": resultado,
     }
+
+
+@router.post("/montadores/{montador_id}/pre-aprovar")
+def pre_aprovar_envio(
+    montador_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Marca o ciclo atual como pré-aprovado. No dia do envio, dispara automático."""
+    if current_user.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="Apenas administradores")
+    
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE montadores SET pre_aprovado_em = NOW() WHERE id = %s",
+            (montador_id,)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Montador não encontrado")
+        conn.commit()
+        return {"message": "Pré-aprovado! O envio será automático no dia configurado."}
+
+
+@router.delete("/montadores/{montador_id}/pre-aprovar")
+def cancelar_pre_aprovacao(
+    montador_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Cancela a pré-aprovação do ciclo atual."""
+    if current_user.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="Apenas administradores")
+    
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE montadores SET pre_aprovado_em = NULL WHERE id = %s",
+            (montador_id,)
+        )
+        conn.commit()
+        return {"message": "Pré-aprovação cancelada."}
 
 
 @router.get("/montadores/historico")

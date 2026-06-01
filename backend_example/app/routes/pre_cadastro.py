@@ -159,7 +159,7 @@ class PreCadastroCreate(BaseModel):
     observacoes: Optional[str] = None
     etapa_atual: int = 1
     # Novos campos - Envio Automático
-    envio_automatico: bool = False
+    envio_automatico: bool = True
     dia_fechamento: int = 25
     dias_envio_mes: Optional[List[int]] = None
     prazo_pagamento_dias: int = 10
@@ -167,6 +167,8 @@ class PreCadastroCreate(BaseModel):
     # Novos campos - Terceirizada
     tipo_pagamento: str = "novo_mundo"
     terceirizada_id: Optional[int] = None
+    # Template de email
+    email_template_id: Optional[int] = None
 
 
 class PreCadastroUpdate(BaseModel):
@@ -203,6 +205,8 @@ class PreCadastroUpdate(BaseModel):
     # Novos campos - Terceirizada
     tipo_pagamento: Optional[str] = None
     terceirizada_id: Optional[int] = None
+    # Template de email
+    email_template_id: Optional[int] = None
 
 
 @router.get("")

@@ -25,6 +25,7 @@ import {
   Headset,
   Hammer,
   Building2,
+  Mail,
 } from "lucide-react";
 import {
   Sidebar,
@@ -123,6 +124,7 @@ const menuItemsConfig: MenuGroup[] = [
     items: [
       { title: "WhatsApp", url: "/whatsapp", icon: MessageSquare },
       { title: "Automação", url: "/automacao", icon: Zap },
+      { title: "Templates de Email", url: "/email-templates", icon: Mail },
     ],
   },
   {

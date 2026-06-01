@@ -1,0 +1,21 @@
+identificador_do_montador,nome_do_montador,identificador_boletim_montagem,data_da_montagem,media_de_valor_venda,nome_do_cliente,nome_produto,tipo_servico,adicional,motivo_valor_extra
+2,david,B2026-016,2026-04-03,1800.00,Cliente Pi,Armário Cozinha,MONTAGEM,0,-
+2,david,B2026-017,2026-04-10,950.00,Cliente Rho,Cadeira Gamer,ASSISTENCIA_TECNICA,50.00,Peça substituída
+2,david,B2026-018,2026-04-15,4200.00,Cliente Sigma,Guarda-Roupa Casal,MONTAGEM,0,-
+2,david,B2026-019,2026-04-20,600.00,Cliente Tau,Mesa Centro,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-020,2026-04-25,3100.00,Cliente Upsilon,Cozinha Completa,MONTAGEM,200.00,Deslocamento interior
+2,david,B2026-021,2026-04-28,1500.00,Cliente Phi,Estante Livros,MONTAGEM,0,-
+2,david,B2026-022,2026-05-01,2200.00,Cliente Chi,Sofá Retrátil,MONTAGEM,0,-
+2,david,B2026-023,2026-05-03,800.00,Cliente Psi,Poltrona Massagem,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-024,2026-05-05,3800.00,Cliente Omega,Home Theater Pro,MONTAGEM,120.00,Instalação especial
+2,david,B2026-025,2026-05-08,1700.00,Cliente Alpha2,Cama Solteiro,MONTAGEM,0,-
+2,david,B2026-026,2026-05-11,950.00,Cliente Beta2,Roupeiro 2 Portas,MONTAGEM,0,-
+2,david,B2026-027,2026-05-13,5200.00,Cliente Gamma2,Sala Estar Completa,MONTAGEM,250.00,Montagem extra peças
+2,david,B2026-028,2026-05-19,1300.00,Cliente Delta2,Painel Ripado,MONTAGEM,0,-
+2,david,B2026-029,2026-05-21,750.00,Cliente Epsilon2,Cadeira Escritório,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-030,2026-05-23,2900.00,Cliente Zeta2,Balcão Banheiro,MONTAGEM,80.00,Parafusos especiais
+2,david,B2026-031,2026-04-05,1100.00,Cliente Eta2,Mesa Escritório,DESMONTAGEM,0,-
+2,david,B2026-032,2026-04-12,4500.00,Cliente Theta2,Quarto Casal,MONTAGEM,0,-
+2,david,B2026-033,2026-04-18,2000.00,Cliente Iota2,Rack Home Theater,MONTAGEM,0,-
+2,david,B2026-034,2026-04-22,670.00,Cliente Kappa2,Aparador Sala,ASSISTENCIA_TECNICA,0,-
+2,david,B2026-035,2026-04-30,3300.00,Cliente Lambda2,Closet Modular,MONTAGEM,150.00,Deslocamento

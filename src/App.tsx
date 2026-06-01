@@ -36,6 +36,7 @@ import Terceirizadas from "./pages/Terceirizadas";
 import PagamentosTerceirizada from "./pages/PagamentosTerceirizada";
 import EnvioAutomaticoMontadores from "./pages/EnvioAutomaticoMontadores";
 import Aprovacoes from "./pages/Aprovacoes";
+import EmailTemplates from "./pages/EmailTemplates";
 import CRM from "./pages/CRM";
 import CRMParametros from "./pages/CRMParametros";
 import AcompanhamentoMontagem from "./pages/AcompanhamentoMontagem";
@@ -250,6 +251,13 @@ const App = () => (
             <Route path="/aprovacoes" element={
               <PrivateRoute adminOnly>
                 <AuthenticatedLayout><Aprovacoes /></AuthenticatedLayout>
+              </PrivateRoute>
+            } />
+
+            {/* Templates de Email */}
+            <Route path="/email-templates" element={
+              <PrivateRoute adminOnly>
+                <AuthenticatedLayout><EmailTemplates /></AuthenticatedLayout>
               </PrivateRoute>
             } />
 
