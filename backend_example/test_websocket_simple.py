@@ -7,7 +7,7 @@ import requests
 import json
 
 # URL do backend
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:14001"
 
 def test_webhook_nf():
     """Testa webhook de NF recebida (deve enviar notificação)"""
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     
     if check_health():
         print("\n💡 ANTES DE TESTAR:")
-        print("   1. Abra o frontend no navegador (http://localhost:8080)")
+        print("   1. Abra o frontend no navegador (http://localhost:14002)")
         print("   2. Abra o Console do navegador (F12)")
         print("   3. Verifique se aparece: 'Conectado ao servidor de notificações'")
         print("\nPressione ENTER para enviar notificação de teste...")

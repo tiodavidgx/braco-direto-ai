@@ -156,7 +156,7 @@ const RevisaoCadastroMontador = () => {
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       return `${window.location.origin}${docPath}`;
     }
-    return `http://localhost:8000${docPath}`;
+    return `http://localhost:14001${docPath}`;
   };
 
   const abrirPreviewDoc = (docPath: string | null, docName: string) => {

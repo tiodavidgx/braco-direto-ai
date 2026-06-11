@@ -560,7 +560,7 @@ export default function WhatsApp() {
                 <h3 className="font-semibold mb-2">📝 Informações</h3>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    • O servidor WhatsApp roda na porta 3000
+                    • O servidor WhatsApp roda na porta 14003
                   </p>
                   <p className="text-sm text-muted-foreground">
                     • As credenciais são salvas automaticamente após o primeiro login

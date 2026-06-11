@@ -43,7 +43,7 @@ const API_BASE = (() => {
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     return `${window.location.origin}/api/v1`;
   }
-  return 'http://localhost:8000/api/v1';
+  return 'http://localhost:14001/api/v1';
 })();
 
 const MOTORISTA_TOKEN_KEY = "braco_motorista_token";

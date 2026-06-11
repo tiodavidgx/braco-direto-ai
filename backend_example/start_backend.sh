@@ -29,4 +29,4 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 echo "🐍 Usando Python: $("$PYTHON_BIN" --version 2>&1)"
 
 # Iniciar o backend
-"$PYTHON_BIN" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+"$PYTHON_BIN" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 14001

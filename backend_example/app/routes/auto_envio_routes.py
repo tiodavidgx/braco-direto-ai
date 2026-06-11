@@ -81,6 +81,7 @@ def resumo_envio_automatico(
                 m.email_responsavel_nm, m.percentual_montagem,
                 m.percentual_assistencia, m.percentual_desmontagem,
                 m.tipo_pagamento, m.terceirizada_id,
+                m.pre_aprovado_em,
                 t.nome as terceirizada_nome
             FROM montadores m
             LEFT JOIN terceirizadas t ON t.id = m.terceirizada_id
@@ -102,7 +103,7 @@ def resumo_envio_automatico(
                         COUNT(*) as qtd_pendentes,
                         COALESCE(SUM(valor_venda), 0) as total_venda,
                         COALESCE(SUM(comissao_calculada), 0) as total_comissao
-                    FROM ingestao_boletins_montador
+                    FROM boletins_montagem_envios
                     WHERE identificador_montador = %s
                       AND status = 'pendente'
                       AND data_montagem >= %s
@@ -116,16 +117,14 @@ def resumo_envio_automatico(
                 if qtd == 0:
                     continue
                 
-                # Badge
-                if is_atual and dia_hoje in dias_envio:
-                    badge = "pronto"
-                    badge_label = "Pronto para envio"
-                elif is_atual:
-                    badge = "aguardando"
-                    badge_label = "Aguardando"
+                # Badge: Aprovado vs Aguardando aprovação
+                pre_aprovado = m.get('pre_aprovado_em')
+                if pre_aprovado:
+                    badge = "aprovado"
+                    badge_label = "Aprovado"
                 else:
-                    badge = "fechado"
-                    badge_label = "Ciclo fechado"
+                    badge = "aguardando"
+                    badge_label = "Aguardando aprovação"
                 
                 resultado.append({
                     "id": m['id'],
@@ -179,10 +178,11 @@ def boletins_montador(
             data_fim = hoje
         
         cur.execute("""
-            SELECT * FROM ingestao_boletins_montador
+            SELECT * FROM boletins_montagem_envios
             WHERE identificador_montador = %s
               AND data_montagem >= %s
               AND data_montagem <= %s
+              AND status = 'pendente'
             ORDER BY data_montagem DESC, boletim
         """, (montador['identificador'], data_inicio, data_fim))
         
@@ -254,7 +254,7 @@ def remover_boletim(
     with get_db_connection() as conn:
         cur = conn.cursor()
         cur.execute(
-            "DELETE FROM ingestao_boletins_montador WHERE id = %s AND status = 'pendente'",
+            "DELETE FROM boletins_montagem_envios WHERE id = %s AND status = 'pendente'",
             (boletim_id,)
         )
         if cur.rowcount == 0:
@@ -356,7 +356,7 @@ def historico_envios_automaticos(
                 SUM(ib.valor_venda) as total_venda,
                 SUM(ib.comissao_calculada) as total_comissao,
                 MAX(ib.updated_at) as data_envio
-            FROM ingestao_boletins_montador ib
+            FROM boletins_montagem_envios ib
             WHERE ib.status = 'processado'
             GROUP BY ib.lote_envio_id, ib.identificador_montador, ib.nome_montador
             ORDER BY MAX(ib.updated_at) DESC

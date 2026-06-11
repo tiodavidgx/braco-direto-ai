@@ -23,7 +23,7 @@ from app.database import get_db_connection
 
 logger = logging.getLogger(__name__)
 
-WHATSAPP_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:3000")
+WHATSAPP_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:14003")
 WA_HEADERS = {"X-Internal-Token": os.getenv("WHATSAPP_INTERNAL_TOKEN", "")}
 
 

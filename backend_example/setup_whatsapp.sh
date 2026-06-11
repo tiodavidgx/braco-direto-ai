@@ -24,7 +24,7 @@ if [ -f "package.json" ]; then
         echo "✅ Dependências instaladas com sucesso!"
         echo ""
         echo "🚀 O servidor WhatsApp está pronto para ser iniciado."
-        echo "   Você pode iniciá-lo pela interface em: http://localhost:8080/whatsapp"
+        echo "   Você pode iniciá-lo pela interface em: http://localhost:14002/whatsapp"
         echo ""
     else
         echo "❌ Erro ao instalar dependências"

@@ -165,7 +165,7 @@ export default function HistoricoEnvios() {
   const carregarHistorico = async () => {
     try {
       setLoading(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       
       // Montar query params
       const params = new URLSearchParams();
@@ -215,7 +215,7 @@ export default function HistoricoEnvios() {
     try {
       setBuscandoOS(true);
       setMostrarResultados(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const response = await fetch(`${API_BASE_URL}/relatorios/historico/buscar?q=${encodeURIComponent(buscaOS.trim())}`);
       
       if (response.ok) {
@@ -241,7 +241,7 @@ export default function HistoricoEnvios() {
   const loadOSItems = async (loteId: number, tipo: string) => {
     try {
       setLoadingOS(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const response = await fetch(`${API_BASE_URL}/relatorios/historico/${loteId}/os?tipo=${tipo}`);
       
       if (response.ok) {
@@ -267,7 +267,7 @@ export default function HistoricoEnvios() {
 
   const handleDelete = async (id: number, tipo: string) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const endpoint = tipo === "prestador" 
         ? `${API_BASE_URL}/relatorios/historico-envios/prestador/${id}`
         : `${API_BASE_URL}/relatorios/historico-envios/montador/${id}`;
@@ -300,7 +300,7 @@ export default function HistoricoEnvios() {
     setShowAddItems(false);
     
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const response = await fetch(
         `${API_BASE_URL}/relatorios/envio/${item.id}/editar-detalhes?tipo=${item.tipo}`
       );
@@ -444,7 +444,7 @@ export default function HistoricoEnvios() {
     setSavingEdit(true);
     
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const response = await fetch(
         `${API_BASE_URL}/relatorios/envio/${editandoEnvio.id}/editar-reenviar`,
         {
@@ -1176,7 +1176,7 @@ export default function HistoricoEnvios() {
                                       variant="outline" 
                                       className="flex-1 gap-2"
                                       onClick={() => {
-                                        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+                                        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
                                         window.open(`${API_BASE_URL}/relatorios/download-relatorio/${item.tipo}/${item.id}`, '_blank');
                                       }}
                                     >

@@ -136,7 +136,7 @@ Obrigado.`,
 
       setLoadingPreview(true);
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
         
         // Coletar O.S.
         const numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
@@ -351,7 +351,7 @@ Obrigado.`,
     toast.info("Enviando relatórios...");
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
       const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

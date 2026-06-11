@@ -9,7 +9,7 @@ const fs = require('fs');
 const pino = require('pino');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.WHATSAPP_PORT || 14003;
 
 // Middleware
 app.use(cors());

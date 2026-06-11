@@ -2265,6 +2265,29 @@ def enviar_lote_relatorios(request: dict):
                 except Exception as e:
                     print(f"   ⚠️ Erro ao marcar custos extras como processados: {e}")
             
+            # === MARCAR BOLETINS COMO PROCESSADOS NA TABELA DE INGESTÃO ===
+            if tipo == "montador":
+                boletins_enviados = [
+                    item.get('identificador_boletim_montagem', '') 
+                    for item in itens 
+                    if item.get('identificador_boletim_montagem') and not item.get('is_ajuste')
+                ]
+                if boletins_enviados:
+                    try:
+                        with get_db_connection() as conn_ing:
+                            cur_ing = conn_ing.cursor()
+                            placeholders = ','.join(['%s'] * len(boletins_enviados))
+                            cur_ing.execute(f"""
+                                UPDATE boletins_montagem_envios
+                                SET status = 'processado', lote_envio_id = %s, updated_at = NOW()
+                                WHERE boletim IN ({placeholders}) AND status = 'pendente'
+                            """, [lote_id] + boletins_enviados)
+                            marcados = cur_ing.rowcount
+                            conn_ing.commit()
+                            print(f"   ✅ {marcados} boletins marcados como processados na ingestão (lote #{lote_id})")
+                    except Exception as e:
+                        print(f"   ⚠️ Erro ao marcar boletins como processados: {e}")
+            
             # Enviar notificação WhatsApp se habilitado
             try:
                 if enviar_whatsapp:
@@ -2326,7 +2349,8 @@ def enviar_lote_relatorios(request: dict):
         "erros": erros,
         "ignorados": ignorados,
         "total": len(dados) + ignorados,
-        "os_status": os_status_list
+        "os_status": os_status_list,
+        "lote_id": lote_id
     }
     
     if erros > 0:
@@ -2728,6 +2752,38 @@ async def deletar_envio_montador(envio_id: int):
                 if reabertos_montador:
                     print(f"   ✅ {len(reabertos_montador)} custos extras do montador reabertos")
             
+            # Reabrir boletins na tabela de ingestão (auto-envio)
+            if boletins:
+                # Buscar o identificador do montador para filtrar corretamente
+                cur.execute("SELECT identificador FROM montadores WHERE id = %s", (montador_id,))
+                montador_row = cur.fetchone()
+                identificador = montador_row['identificador'] if montador_row else None
+                
+                if identificador:
+                    placeholders = ','.join(['%s'] * len(boletins))
+                    cur.execute(f"""
+                        UPDATE boletins_montagem_envios
+                        SET status = 'pendente', lote_envio_id = NULL, updated_at = NOW()
+                        WHERE identificador_montador = %s
+                          AND boletim IN ({placeholders})
+                          AND status = 'processado'
+                        RETURNING id, boletim
+                    """, [identificador] + boletins)
+                    reabertos_boletins = cur.fetchall()
+                    if reabertos_boletins:
+                        print(f"   ✅ {len(reabertos_boletins)} boletins reabertos na ingestão: {[r['boletim'] for r in reabertos_boletins]}")
+                
+                # Também reverter por lote_envio_id (link direto, caso exista)
+                cur.execute("""
+                    UPDATE boletins_montagem_envios
+                    SET status = 'pendente', lote_envio_id = NULL, updated_at = NOW()
+                    WHERE lote_envio_id = %s AND status = 'processado'
+                    RETURNING id, boletim
+                """, (envio_id,))
+                reabertos_por_lote = cur.fetchall()
+                if reabertos_por_lote:
+                    print(f"   ✅ {len(reabertos_por_lote)} boletins reabertos por lote_envio_id")
+            
             # Deletar notificações relacionadas primeiro (por lote_id e por envio_montagem_id)
             cur.execute('DELETE FROM notificacoes WHERE lote_id = %s AND tipo LIKE %s', (envio_id, '%montagem%'))
             cur.execute('DELETE FROM notificacoes WHERE envio_montagem_id = %s', (envio_id,))
@@ -2749,7 +2805,7 @@ async def deletar_envio_montador(envio_id: int):
             
             conn.commit()
             
-        return {"success": True, "message": f"Envio de montagem #{envio_id} excluído com sucesso. Custos extras reabertos."}
+        return {"success": True, "message": f"Envio de montagem #{envio_id} excluído. Boletins e custos extras reabertos para reenvio."}
     
     except HTTPException:
         raise

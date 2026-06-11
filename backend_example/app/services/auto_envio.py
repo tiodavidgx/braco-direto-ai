@@ -5,13 +5,13 @@ Job que processa boletins pendentes e envia via endpoint HTTP interno
 
 import os
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Any, Tuple, Optional
 import psycopg2.extras
 from app.database import get_db_connection
 
 
-API_INTERNAL_URL = os.getenv("API_INTERNAL_URL", "http://localhost:8000")
+API_INTERNAL_URL = os.getenv("API_INTERNAL_URL", "http://localhost:14001")
 API_INTERNAL_TOKEN = os.getenv("API_INTERNAL_TOKEN", "")
 
 
@@ -82,35 +82,38 @@ def _buscar_email_config(tipo: str = "montador", template_id: int = None) -> Dic
 
 def processar_envios_pre_aprovados() -> Dict[str, Any]:
     """
-    Job scheduler: verifica montadores pré-aprovados cujo dia de envio é hoje.
-    Se encontrar, dispara o envio automático.
+    Job scheduler: envia no dia seguinte ao fechamento do ciclo.
+    Regra: se o ciclo fecha no dia X (dias_envio_mes), o disparo é no dia X+1.
+    Ex: dias_envio=[11,16,26] → disparos nos dias 12, 17, 27.
     """
     hoje = date.today()
-    dia_hoje = hoje.day
+    ontem = hoje - timedelta(days=1)
+    dia_ontem = ontem.day
     
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Buscar montadores pré-aprovados com hoje no dias_envio_mes
+        # Buscar montadores pré-aprovados cujo dia de fechamento foi ONTEM
         cur.execute("""
             SELECT id, nome FROM montadores 
             WHERE envio_automatico = TRUE 
               AND ativo = TRUE
               AND pre_aprovado_em IS NOT NULL
               AND %s = ANY(dias_envio_mes)
-        """, (dia_hoje,))
+        """, (dia_ontem,))
         
         montadores = cur.fetchall()
         
         if not montadores:
-            return {"status": "ok", "mensagem": f"Nenhum montador pré-aprovado para hoje (dia {dia_hoje})"}
+            return {"status": "ok", "mensagem": f"Nenhum montador pré-aprovado para hoje (fechamento dia {dia_ontem})"}
         
         resultado = {"processados": 0, "erros": 0, "detalhes": []}
         
         for m in montadores:
             try:
+                # Envia boletins até a data de fechamento (ontem)
                 resp = processar_envios_automaticos_montadores(
-                    dry_run=False, montador_id=m['id']
+                    dry_run=False, montador_id=m['id'], ate_data=ontem
                 )
                 # Limpar pré-aprovação após envio
                 cur.execute(
@@ -196,7 +199,7 @@ def processar_envios_automaticos_montadores(dry_run: bool = False, montador_id: 
                 
                 # Buscar boletins pendentes
                 cur.execute("""
-                    SELECT * FROM ingestao_boletins_montador
+                    SELECT * FROM boletins_montagem_envios
                     WHERE identificador_montador = %s
                       AND status = 'pendente'
                       AND data_montagem >= %s
@@ -294,7 +297,7 @@ def processar_envios_automaticos_montadores(dry_run: bool = False, montador_id: 
                     f"{API_INTERNAL_URL}/api/v1/relatorios/enviar-lote",
                     json=payload,
                     headers=_get_internal_auth_header(),
-                    timeout=120,
+                    timeout=600,
                 )
                 
                 if response.status_code == 200:
@@ -307,7 +310,7 @@ def processar_envios_automaticos_montadores(dry_run: bool = False, montador_id: 
                     if sucessos > 0:
                         for b in boletins:
                             cur.execute("""
-                                UPDATE ingestao_boletins_montador
+                                UPDATE boletins_montagem_envios
                                 SET status = 'processado', lote_envio_id = %s, updated_at = NOW()
                                 WHERE id = %s
                             """, (resp_data.get('lote_id'), b['id']))

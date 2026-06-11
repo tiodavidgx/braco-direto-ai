@@ -24,7 +24,7 @@ const getApiBaseUrl = (): string => {
   }
   
   // Fallback para desenvolvimento local
-  return 'http://localhost:8000/api/v1';
+  return 'http://localhost:14001/api/v1';
 };
 
 export class APIError extends Error {

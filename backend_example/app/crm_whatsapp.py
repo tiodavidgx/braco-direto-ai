@@ -18,7 +18,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-WHATSAPP_URL = "http://localhost:3000/send"
+WHATSAPP_URL = "http://localhost:14003/send"
 DOMAIN = "https://suportedg.site"
 
 

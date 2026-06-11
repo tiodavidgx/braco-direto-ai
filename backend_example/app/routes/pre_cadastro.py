@@ -23,7 +23,7 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # URL do servidor WhatsApp
-WHATSAPP_SERVER_URL = os.getenv("WHATSAPP_SERVER_URL", "http://localhost:3000")
+WHATSAPP_SERVER_URL = os.getenv("WHATSAPP_SERVER_URL", "http://localhost:14003")
 
 
 def enviar_notificacao_async(tipo: str, titulo: str, mensagem: str, dados: dict = None):

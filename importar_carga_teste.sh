@@ -2,7 +2,7 @@
 # Script para importar carga de teste de boletins via API
 # Uso: ./importar_carga_teste.sh
 
-API_URL="${API_URL:-http://localhost:8000}"
+API_URL="${API_URL:-http://localhost:14001}"
 API_KEY="${API_KEY:-test-key-braco-direto-2026}"
 CSV_FILE="${1:-carga_teste_montadores.csv}"
 

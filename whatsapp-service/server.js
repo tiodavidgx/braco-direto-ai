@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.WHATSAPP_PORT || 14003;
 
 // Middleware
 app.use(cors());
@@ -104,7 +104,7 @@ function setupEventHandlers() {
                 return;
             }
             qrCodeData = url;
-            console.log('✅ QR Code disponível em: http://localhost:3000/qr');
+            console.log(`✅ QR Code disponível em: http://localhost:${PORT}/qr`);
         });
         isInitializing = false;
     });

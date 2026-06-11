@@ -28,7 +28,7 @@ def require_motorista(current_user: dict = Depends(get_current_user)) -> dict:
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "motorista")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-WHATSAPP_BASE_URL = "http://localhost:3000"
+WHATSAPP_BASE_URL = "http://localhost:14003"
 
 
 def enviar_whatsapp_despesa(lancamento: dict, telefone: str):

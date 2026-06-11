@@ -99,7 +99,7 @@ Qualquer dúvida, estamos à disposição.`,
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       return `${window.location.origin}/api/v1`;
     }
-    return 'http://localhost:8000/api/v1';
+    return 'http://localhost:14001/api/v1';
   };
 
   // Armazenar boletins de ajuste já adicionados para não duplicar
@@ -490,7 +490,7 @@ Qualquer dúvida, estamos à disposição.`,
         if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
           return `${window.location.origin}/api/v1`;
         }
-        return 'http://localhost:8000/api/v1';
+        return 'http://localhost:14001/api/v1';
       };
       const API_BASE_URL = getApiBaseUrl();
 

@@ -9,7 +9,7 @@ import sys
 def simular_nf_recebida(lote_id, tipo="lote"):
     """Simula recebimento de NF para um lote"""
     
-    url = "http://localhost:8000/api/v1/upload/webhook/nf-recebida"
+    url = "http://localhost:14001/api/v1/upload/webhook/nf-recebida"
     
     payload = {
         "lote_id": lote_id,

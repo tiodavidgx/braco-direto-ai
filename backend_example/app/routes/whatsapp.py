@@ -16,7 +16,7 @@ import time
 # Endpoints administrativos (start/stop/restart) adicionam require_admin.
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
-WHATSAPP_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:3000")
+WHATSAPP_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:14003")
 # O serviço WhatsApp (Baileys) roda via systemd: braco-whatsapp.service
 # Diretório: /var/www/braco-direto-ai/whatsapp-service/server-baileys.js
 

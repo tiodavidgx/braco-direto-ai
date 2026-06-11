@@ -556,7 +556,7 @@ envio_automatico: true,
       if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         return `${window.location.origin}/api/v1/pre-cadastro-montadores/${editando.id}/upload/${tipo}`;
       }
-      return `http://localhost:8000/api/v1/pre-cadastro-montadores/${editando.id}/upload/${tipo}`;
+      return `http://localhost:14001/api/v1/pre-cadastro-montadores/${editando.id}/upload/${tipo}`;
     };
 
     try {

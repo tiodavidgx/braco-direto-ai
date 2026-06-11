@@ -28,10 +28,10 @@ source venv/bin/activate
 # Iniciar uvicorn
 echo ""
 echo "════════════════════════════════════════════════════════════"
-echo "  Backend rodando em: http://localhost:8000"
-echo "  Documentação: http://localhost:8000/docs"
-echo "  WebSocket: ws://localhost:8000/api/v1/ws/notifications"
+echo "  Backend rodando em: http://localhost:14001"
+echo "  Documentação: http://localhost:14001/docs"
+echo "  WebSocket: ws://localhost:14001/api/v1/ws/notifications"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 14001

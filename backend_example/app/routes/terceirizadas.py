@@ -267,7 +267,9 @@ def pagamentos_terceirizada(
             dados = cur.fetchone()
             
             if dados and dados['qtd_boletins'] > 0:
-                comissao_terc = float(dados['total_venda']) * float(terc['percentual_montagem'])
+                # percentual_montagem é armazenado como porcentagem (ex: 13 = 13%), 
+                # então divide por 100 para obter o fator decimal
+                comissao_terc = float(dados['total_venda']) * (float(terc['percentual_montagem']) / 100)
                 
                 resultado_montadores.append({
                     "montador_id": mont['id'],

@@ -32,7 +32,7 @@ const getApiBaseUrl = (): string => {
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     return `${window.location.origin}/api/v1`;
   }
-  return 'http://localhost:8000/api/v1';
+  return 'http://localhost:14001/api/v1';
 };
 
 const API_URL = getApiBaseUrl();

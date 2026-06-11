@@ -43,7 +43,7 @@ DB_PASS=${DB_PASSWORD}
 
 # API Configuration
 API_HOST=0.0.0.0
-API_PORT=8000
+API_PORT=14001
 DEBUG=False
 ENV=production
 
@@ -64,7 +64,7 @@ API_UPLOAD_URL=${API_UPLOAD_URL:-https://api.link.dev.br/dvprocessamento/}
 API_UPLOAD_KEY=${API_UPLOAD_KEY}
 
 # WhatsApp Integration (local na VPS)
-WHATSAPP_BASE_URL=http://localhost:3000
+WHATSAPP_BASE_URL=http://localhost:14003
 WHATSAPP_INTERNAL_TOKEN=${WHATSAPP_INTERNAL_TOKEN:-}
 
 # Trello Integration (desabilitado por padrão)

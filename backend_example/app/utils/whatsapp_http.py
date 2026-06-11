@@ -7,7 +7,7 @@ chamadas para evitar acesso não autenticado ao serviço interno.
 import os
 import requests
 
-WA_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:3000")
+WA_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:14003")
 _WA_TOKEN = os.getenv("WHATSAPP_INTERNAL_TOKEN", "")
 
 # Exposto para compatibilidade com módulos que já referenciam WA_HEADERS.

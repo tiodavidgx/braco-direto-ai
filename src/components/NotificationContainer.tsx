@@ -8,7 +8,7 @@ const getWsUrl = (): string => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/api/v1/ws/notifications`;
   }
-  return 'ws://localhost:8000/api/v1/ws/notifications';
+  return 'ws://localhost:14001/api/v1/ws/notifications';
 };
 
 export function NotificationContainer() {

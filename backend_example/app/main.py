@@ -17,7 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.database import init_db
 from app.utils.rate_limit import limiter
-from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications, sistema_auth, custos_extras, mms, pre_cadastro, gestao_pagamentos, lancamentos_motorista, dados_bot, crm, montagem, ingestao, terceirizadas, aprovacoes, auto_envio_routes, email_templates
+from app.routes import prestadores, montadores, dashboard, relatorios, blacklist, pagamentos, whatsapp, automacao, integracoes, jobs, auth, upload_api, notifications, sistema_auth, custos_extras, mms, pre_cadastro, gestao_pagamentos, lancamentos_motorista, dados_bot, crm, montagem, ingestao, ingestao_sync, terceirizadas, aprovacoes, auto_envio_routes, email_templates
 
 # Carregar .env do diretório do projeto (backend_example/) independente do CWD
 _env_path = Path(__file__).resolve().parent.parent / '.env'
@@ -37,6 +37,35 @@ app = FastAPI(
     docs_url=None if IS_PROD else "/docs",
     redoc_url=None if IS_PROD else "/redoc",
     openapi_url=None if IS_PROD else "/openapi.json",
+)
+
+# --- CORS (DEVE ser o primeiro middleware para interceptar preflight OPTIONS) ---
+# Lista explícita de origens autorizadas. Em dev, inclui localhost.
+_default_origins = [
+    "https://suportedg.site",
+    "https://www.suportedg.site",
+]
+if not IS_PROD:
+    _default_origins += [
+        "http://localhost:14002",
+        "http://localhost:5173",
+        "http://127.0.0.1:14002",
+        "http://127.0.0.1:5173",
+    ]
+
+_extra_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+cors_origins = list({*_default_origins, *_extra_origins})
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-API-Key", "X-Setup-Token"],
 )
 
 # Rate limiter (slowapi)
@@ -62,36 +91,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
-
-
-# --- CORS restrito ---
-# Lista explícita de origens autorizadas. Em dev, inclui localhost.
-_default_origins = [
-    "https://suportedg.site",
-    "https://www.suportedg.site",
-]
-if not IS_PROD:
-    _default_origins += [
-        "http://localhost:8080",
-        "http://localhost:5173",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:5173",
-    ]
-
-_extra_origins = [
-    o.strip()
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-    if o.strip()
-]
-cors_origins = list({*_default_origins, *_extra_origins})
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-API-Key", "X-Setup-Token"],
-)
 
 # Inicializar banco de dados na inicialização
 @app.on_event("startup")
@@ -269,6 +268,12 @@ app.include_router(
 )
 
 app.include_router(
+    ingestao_sync.router, 
+    prefix="/api/v1/ingestao", 
+    tags=["Sync de Boletins"]
+)
+
+app.include_router(
     crm.router, 
     prefix="/api/v1/crm", 
     tags=["CRM"]
@@ -315,4 +320,4 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=14001)

@@ -118,8 +118,8 @@ echo -e "${GREEN}[8/8] Configurando firewall...${NC}"
 ufw allow 22/tcp    # SSH
 ufw allow 80/tcp    # HTTP
 ufw allow 443/tcp   # HTTPS
-ufw allow 8000/tcp  # API Backend (temporário para debug)
-ufw allow 3000/tcp  # WhatsApp Server (temporário para debug)
+ufw allow 14001/tcp  # API Backend (temporário para debug)
+ufw allow 14003/tcp  # WhatsApp Server (temporário para debug)
 ufw --force enable
 
 echo ""

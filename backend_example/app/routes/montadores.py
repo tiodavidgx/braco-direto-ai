@@ -190,17 +190,46 @@ def atualizar_montador(montador_id: int, montador: MontadorUpdate):
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Verificar se existe
-        cur.execute("SELECT id FROM montadores WHERE id = %s", (montador_id,))
-        if not cur.fetchone():
+        # Verificar se existe e pegar valores atuais dos campos unique
+        cur.execute(
+            "SELECT id, identificador, fornecedor_id FROM montadores WHERE id = %s",
+            (montador_id,)
+        )
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Montador não encontrado")
+        identificador_atual = row['identificador']
+        fornecedor_id_atual = row.get('fornecedor_id')
         
         # Construir query de update dinamicamente
         campos = []
         valores = []
         
-        for campo, valor in montador.dict(exclude_unset=True).items():
-            # Mapear cidade para localidade no banco
+        for campo, valor in montador.dict(exclude_unset=True).items():            # Pular campos com valor None (não foram realmente alterados)
+            if valor is None:
+                continue            # Pular campos unique se valor igual ao atual
+            if campo == "identificador" and str(valor or '').strip() == str(identificador_atual or '').strip():
+                continue
+            if campo == "fornecedor_id" and str(valor or '').strip() == str(fornecedor_id_atual or '').strip():
+                continue
+            
+            # Validar campos unique antes do UPDATE
+            if campo == "identificador":
+                cur.execute(
+                    "SELECT id FROM montadores WHERE identificador = %s AND id != %s",
+                    (str(valor).strip(), montador_id)
+                )
+                if cur.fetchone():
+                    raise HTTPException(status_code=400, detail="Identificador já está em uso por outro montador")
+            
+            if campo == "fornecedor_id":
+                cur.execute(
+                    "SELECT id FROM montadores WHERE fornecedor_id = %s AND id != %s",
+                    (str(valor).strip(), montador_id)
+                )
+                if cur.fetchone():
+                    raise HTTPException(status_code=400, detail="Fornecedor ID já está em uso por outro montador")
+            
             db_campo = "localidade" if campo == "cidade" else campo
             campos.append(f"{db_campo} = %s")
             valores.append(valor)
@@ -213,11 +242,16 @@ def atualizar_montador(montador_id: int, montador: MontadorUpdate):
         
         try:
             cur.execute(query, valores)
-        except psycopg2.IntegrityError:
-            raise HTTPException(
-                status_code=400,
-                detail="Identificador já está em uso por outro montador"
-            )
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            msg = str(e)
+            if 'identificador' in msg:
+                detail = "Identificador já está em uso por outro montador"
+            elif 'fornecedor_id' in msg:
+                detail = "Fornecedor ID já está em uso por outro montador"
+            else:
+                detail = f"Erro de integridade: {msg}"
+            raise HTTPException(status_code=400, detail=detail)
         montador_atualizado = cur.fetchone()
         
         return montador_atualizado

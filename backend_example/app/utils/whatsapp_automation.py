@@ -9,7 +9,7 @@ from app.database import get_db_connection
 from app.utils.whatsapp_http import WA_HEADERS
 import psycopg2.extras
 
-WHATSAPP_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:3000")
+WHATSAPP_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "http://localhost:14003")
 
 
 def processar_template(template: str, variaveis: Dict[str, Any]) -> str:

@@ -2,7 +2,7 @@
 # Script para carregar dados de teste de montadores
 # Uso: bash carregar_dados_teste.sh
 
-API_URL="${API_URL:-http://localhost:8000}"
+API_URL="${API_URL:-http://localhost:14001}"
 API_KEY="${API_KEY:-test-key-braco-direto-2026}"
 CSV_FILE="carga_teste_montadores.csv"
 
@@ -62,5 +62,5 @@ GROUP BY identificador_montador;
 echo ""
 echo "============================================"
 echo "  ✅ Carga concluída!"
-echo "  Acesse: http://localhost:8080/envio-automatico-montadores"
+echo "  Acesse: http://localhost:14002/envio-automatico-montadores"
 echo "============================================"
