@@ -192,9 +192,9 @@ const App = () => (
               </PrivateRoute>
             } />
             
-            {/* MMS - Limpeza de Dados */}
+            {/* MMS - Limpeza de Dados - Liberado para todos os usuários */}
             <Route path="/mms" element={
-              <PrivateRoute adminOnly>
+              <PrivateRoute>
                 <AuthenticatedLayout><MMS /></AuthenticatedLayout>
               </PrivateRoute>
             } />

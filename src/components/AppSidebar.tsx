@@ -141,7 +141,7 @@ const menuItemsConfig: MenuGroup[] = [
   },
   {
     title: "MMS",
-    adminOnly: true,
+    adminOnly: false,
     items: [
       { title: "Limpeza de Dados", url: "/mms", icon: FileSpreadsheet },
     ],

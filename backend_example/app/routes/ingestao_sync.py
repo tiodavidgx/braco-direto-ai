@@ -8,7 +8,7 @@ import os
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 import psycopg2.extras
 from app.database import get_db_connection
 
@@ -56,7 +56,7 @@ def parse_date(value):
 # ── Model ─────────────────────────────────────────────
 
 class BoletimSyncEntry(BaseModel):
-    """13 colunas do Excel de montagem"""
+    """13 colunas do Excel de montagem — aceita variantes de nomes de campo"""
     nome_do_montador: Optional[str] = None
     identificador_do_montador: str
     identificador_boletim_montagem: str
@@ -70,6 +70,32 @@ class BoletimSyncEntry(BaseModel):
     nome_produto: Optional[str] = None
     media_de_valor_venda: Optional[float] = 0.0
     tipo_servico: Optional[str] = "MONTAGEM"
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalizar_chaves(cls, data: dict) -> dict:
+        """Aceita nomes alternativos de campos comuns do outro sistema."""
+        if not isinstance(data, dict):
+            return data
+        # valor_venda → media_de_valor_venda
+        if 'valor_venda' in data and 'media_de_valor_venda' not in data:
+            data['media_de_valor_venda'] = data['valor_venda']
+        # data_montagem → data_da_montagem
+        if 'data_montagem' in data and 'data_da_montagem' not in data:
+            data['data_da_montagem'] = data['data_montagem']
+        # nome_cliente → nome_do_cliente
+        if 'nome_cliente' in data and 'nome_do_cliente' not in data:
+            data['nome_do_cliente'] = data['nome_cliente']
+        # nome_montador → nome_do_montador
+        if 'nome_montador' in data and 'nome_do_montador' not in data:
+            data['nome_do_montador'] = data['nome_montador']
+        # boletim → identificador_boletim_montagem
+        if 'boletim' in data and 'identificador_boletim_montagem' not in data:
+            data['identificador_boletim_montagem'] = data['boletim']
+        # previsao_montagem → data_da_previsao_montagem
+        if 'previsao_montagem' in data and 'data_da_previsao_montagem' not in data:
+            data['data_da_previsao_montagem'] = data['previsao_montagem']
+        return data
 
 
 # ── Endpoint ──────────────────────────────────────────
@@ -273,8 +299,7 @@ def sync_boletins_montadores(
                             data_montagem, data_previsao_montagem,
                             valor_venda, nome_cliente, nome_produto,
                             tipo_servico, comissao_calculada,
-                            filial_saida, nota_fiscal, serie_nota_fiscal,
-                            status, updated_at
+                            filial_saida, nota_fiscal, serie_nota_fiscal
                         ) VALUES %s
                         ON CONFLICT (identificador_montador, boletim)
                         DO UPDATE SET
