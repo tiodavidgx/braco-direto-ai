@@ -1,51 +1,67 @@
 """
 Rotas para processamento de dados MMS
-Verifica duplicidade de certificados e gera relatórios limpos
+Verifica duplicidade pelo Número do Pedido e gera relatórios limpos
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from psycopg2.extras import Json
 from app.database import get_db_connection
+from app.routes.sistema_auth import get_current_user
 
 router = APIRouter()
 
 
+def _ensure_import_log_table(cursor):
+    """Garante que a tabela de logs de importação exista (auto-migração)."""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mms_importacoes (
+            id SERIAL PRIMARY KEY,
+            total_recebidos INTEGER NOT NULL DEFAULT 0,
+            total_novos INTEGER NOT NULL DEFAULT 0,
+            total_duplicados INTEGER NOT NULL DEFAULT 0,
+            usuario_id INTEGER,
+            usuario_nome VARCHAR(255),
+            criado_em TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+
 class MMSRecord(BaseModel):
-    certificado: str
-    filial_montadora: Optional[str] = None
-    data_emissao: Optional[str] = None
-    data_entrega: Optional[str] = None
-    data_pre_agendamento: Optional[str] = None
-    turno_agendamento: Optional[str] = None
-    codigo_conjunto: Optional[str] = None
-    codigo_mercadoria: Optional[str] = None
-    qtde_unit_mercadoria: Optional[str] = None
-    descricao_mercadoria: Optional[str] = None
-    valor_mercadoria: Optional[str] = None
-    valor_unitario_mercadoria: Optional[str] = None
-    valor_servico: Optional[str] = None
-    valor_custo: Optional[str] = None
-    vigencia_inicial: Optional[str] = None
-    nome_cliente: Optional[str] = None
-    cpf_cnpj: Optional[str] = None
-    endereco: Optional[str] = None
-    numero_endereco: Optional[str] = None
-    complemento_endereco: Optional[str] = None
-    referencia: Optional[str] = None
+    """Uma linha do relatório MMS. A chave de duplicidade é o Número do Pedido."""
+    numero_pedido: str
+    filial: Optional[str] = None
+    canal_venda: Optional[str] = None
+    origem_os: Optional[str] = None
+    id_contrato: Optional[str] = None
+    id_criticidade: Optional[str] = None
+    cep: Optional[str] = None
+    logradouro: Optional[str] = None
+    numero: Optional[str] = None
+    bairro: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
-    bairro: Optional[str] = None
-    cep: Optional[str] = None
-    ddd: Optional[str] = None
-    telefone_principal: Optional[str] = None
-    ddd_tel_secundario: Optional[str] = None
-    tel_secundario: Optional[str] = None
-    email_segurado: Optional[str] = None
-    tipo_pessoa: Optional[str] = None
-    entrega_realizada: Optional[str] = None
-    id_plano: Optional[str] = None
+    complemento: Optional[str] = None
+    referencia_endereco: Optional[str] = None
+    telefone: Optional[str] = None
+    celular: Optional[str] = None
+    email: Optional[str] = None
+    nome_cliente: Optional[str] = None
+    cpf_cnpj: Optional[str] = None
+    valor_total_pedido: Optional[str] = None
+    data_recebimento: Optional[str] = None
+    id_servico: Optional[str] = None
+    valor_servico: Optional[str] = None
+    data_agendamento: Optional[str] = None
+    turno_agendamento: Optional[str] = None
+    data_previsao_entrega: Optional[str] = None
+    confirma_entrega: Optional[str] = None
+    sku_produto: Optional[str] = None
+    descricao_produto: Optional[str] = None
+    valor_unitario_produto: Optional[str] = None
+    quantidade_produto: Optional[str] = None
+    quantidade_volumes: Optional[str] = None
 
 
 class MMSProcessRequest(BaseModel):
@@ -59,119 +75,72 @@ class MMSProcessResponse(BaseModel):
     dados_novos: List[MMSRecord]
 
 
-def parse_date(date_str: Optional[str]) -> Optional[str]:
-    """Tenta converter string de data para formato SQL"""
-    if not date_str or date_str.strip() == '':
-        return None
-    try:
-        # Tentar diferentes formatos
-        for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']:
-            try:
-                dt = datetime.strptime(date_str.strip(), fmt)
-                return dt.strftime('%Y-%m-%d')
-            except:
-                continue
-        return None
-    except:
-        return None
-
-
-def parse_decimal(value_str: Optional[str]) -> Optional[float]:
-    """Converte string para decimal"""
-    if not value_str or value_str.strip() == '':
-        return None
-    try:
-        # Remover R$, espaços e trocar vírgula por ponto
-        cleaned = value_str.replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
-        return float(cleaned)
-    except:
-        return None
+def _ensure_dados_column(cursor):
+    """Garante a coluna JSONB com a linha completa do relatório (auto-migração)."""
+    cursor.execute("""
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'mms_certificados' AND column_name = 'dados'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("ALTER TABLE mms_certificados ADD COLUMN IF NOT EXISTS dados JSONB")
 
 
 @router.post("/processar", response_model=MMSProcessResponse)
-def processar_mms(request: MMSProcessRequest):
+def processar_mms(
+    request: MMSProcessRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     Processa dados MMS:
-    1. Verifica quais certificados já existem no banco
-    2. Salva os novos certificados
-    3. Retorna apenas os dados NÃO duplicados
+    1. Verifica quais Números do Pedido já existem no banco
+    2. Salva os novos pedidos (coluna certificado = Número do Pedido, linha completa em dados)
+    3. Registra um log da importação (data/hora, quantidades e quem realizou)
+    4. Retorna apenas os dados NÃO duplicados
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
         try:
+            _ensure_dados_column(cursor)
+
             dados_novos = []
             dados_duplicados = []
-            
+
             for record in request.dados:
-                # Verificar se certificado já existe
+                # Verificar se o pedido já existe
                 cursor.execute(
                     "SELECT id FROM mms_certificados WHERE certificado = %s",
-                    (record.certificado,)
+                    (record.numero_pedido,)
                 )
-                
+
                 if cursor.fetchone():
                     # Já existe - é duplicado
                     dados_duplicados.append(record)
                 else:
                     # Não existe - é novo
                     dados_novos.append(record)
-                    
-                    # Inserir no banco
-                    cursor.execute("""
-                        INSERT INTO mms_certificados (
-                            certificado, filial_montadora, data_emissao, data_entrega,
-                            data_pre_agendamento, turno_agendamento, codigo_conjunto,
-                            codigo_mercadoria, qtde_unit_mercadoria, descricao_mercadoria,
-                            valor_mercadoria, valor_unitario_mercadoria, valor_servico,
-                            valor_custo, vigencia_inicial, nome_cliente, cpf_cnpj,
-                            endereco, numero_endereco, complemento_endereco, referencia,
-                            cidade, uf, bairro, cep, ddd, telefone_principal,
-                            ddd_tel_secundario, tel_secundario, email_segurado,
-                            tipo_pessoa, entrega_realizada, id_plano
-                        ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s
-                        )
-                    """, (
-                        record.certificado,
-                        record.filial_montadora,
-                        parse_date(record.data_emissao),
-                        parse_date(record.data_entrega),
-                        parse_date(record.data_pre_agendamento),
-                        record.turno_agendamento,
-                        record.codigo_conjunto,
-                        record.codigo_mercadoria,
-                        parse_decimal(record.qtde_unit_mercadoria),
-                        record.descricao_mercadoria,
-                        parse_decimal(record.valor_mercadoria),
-                        parse_decimal(record.valor_unitario_mercadoria),
-                        parse_decimal(record.valor_servico),
-                        parse_decimal(record.valor_custo),
-                        parse_date(record.vigencia_inicial),
-                        record.nome_cliente,
-                        record.cpf_cnpj,
-                        record.endereco,
-                        record.numero_endereco,
-                        record.complemento_endereco,
-                        record.referencia,
-                        record.cidade,
-                        record.uf,
-                        record.bairro,
-                        record.cep,
-                        record.ddd,
-                        record.telefone_principal,
-                        record.ddd_tel_secundario,
-                        record.tel_secundario,
-                        record.email_segurado,
-                        record.tipo_pessoa,
-                        record.entrega_realizada,
-                        record.id_plano
-                    ))
-            
+                    cursor.execute(
+                        "INSERT INTO mms_certificados (certificado, dados) VALUES (%s, %s)",
+                        (record.numero_pedido, Json(record.model_dump()))
+                    )
+
+            # Registrar log da importação (quem, quando e quantidades)
+            _ensure_import_log_table(cursor)
+            cursor.execute("""
+                INSERT INTO mms_importacoes (
+                    total_recebidos, total_novos, total_duplicados,
+                    usuario_id, usuario_nome
+                ) VALUES (%s, %s, %s, %s, %s)
+            """, (
+                len(request.dados),
+                len(dados_novos),
+                len(dados_duplicados),
+                current_user.get("id"),
+                current_user.get("nome"),
+            ))
+
             conn.commit()
-            
+
             return MMSProcessResponse(
                 total_recebidos=len(request.dados),
                 total_novos=len(dados_novos),
@@ -186,26 +155,39 @@ def processar_mms(request: MMSProcessRequest):
             cursor.close()
 
 
-@router.delete("/limpar")
-def limpar_dados():
-    """Limpa todos os certificados do banco (para reiniciar do zero)"""
+@router.get("/importacoes")
+def listar_importacoes(current_user: dict = Depends(get_current_user)):
+    """Lista o histórico de importações (data/hora, quantidades e quem realizou)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
+
         try:
-            cursor.execute("DELETE FROM mms_certificados")
-            deleted = cursor.rowcount
+            _ensure_import_log_table(cursor)
             conn.commit()
-            
-            return {
-                "success": True,
-                "message": f"{deleted} registros removidos",
-                "registros_removidos": deleted
-            }
-            
+
+            cursor.execute("""
+                SELECT id, criado_em, total_recebidos, total_novos,
+                       total_duplicados, usuario_nome
+                FROM mms_importacoes
+                ORDER BY criado_em DESC
+                LIMIT 200
+            """)
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    "id": r[0],
+                    "criado_em": r[1].isoformat() if r[1] else None,
+                    "total_recebidos": r[2],
+                    "total_novos": r[3],
+                    "total_duplicados": r[4],
+                    "usuario_nome": r[5],
+                }
+                for r in rows
+            ]
+
         except Exception as e:
-            conn.rollback()
-            raise HTTPException(status_code=500, detail=f"Erro ao limpar dados: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Erro ao listar importações: {str(e)}")
         finally:
             cursor.close()
 
@@ -240,7 +222,7 @@ def get_estatisticas():
 @router.post("/verificar")
 def verificar_duplicados(request: MMSProcessRequest):
     """
-    Apenas verifica quais certificados são duplicados SEM salvar no banco.
+    Apenas verifica quais pedidos são duplicados SEM salvar no banco.
     Útil para preview antes de processar.
     """
     with get_db_connection() as conn:
@@ -249,13 +231,20 @@ def verificar_duplicados(request: MMSProcessRequest):
         try:
             dados_novos = []
             dados_duplicados = []
-            
+            # Pedidos já vistos neste relatório: uma linha por pedido, igual ao /processar
+            vistos = set()
+
             for record in request.dados:
+                if record.numero_pedido in vistos:
+                    dados_duplicados.append(record)
+                    continue
+                vistos.add(record.numero_pedido)
+
                 cursor.execute(
                     "SELECT id FROM mms_certificados WHERE certificado = %s",
-                    (record.certificado,)
+                    (record.numero_pedido,)
                 )
-                
+
                 if cursor.fetchone():
                     dados_duplicados.append(record)
                 else:
