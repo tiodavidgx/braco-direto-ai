@@ -87,12 +87,24 @@ type MMSRecord = Record<MMSField, string>;
 const KEY_FIELD: MMSField = "numero_pedido";
 const KEY_HEADER = "Número do Pedido";
 
-// Normaliza nome de coluna: sem acento, minúsculo, espaços simples
+// Nomes com que as colunas vêm no relatório exportado do MMS (o sufixo "mms" já é ignorado)
+const HEADER_ALIASES: Partial<Record<MMSField, string[]>> = {
+  filial: ["Filial Montadora"],
+  numero: ["numeroEndereco"],
+  complemento: ["complementoEndereco"],
+  referencia_endereco: ["referencia"],
+  nome_cliente: ["Cliente"],
+  cpf_cnpj: ["Cpf Cnpj Cliente"],
+  turno_agendamento: ["Turno agendamento"],
+};
+
+// Normaliza nome de coluna: sem acento, minúsculo, espaços simples, sem sufixo "mms"
 const normalizeHeader = (header: string) =>
-  header.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  header.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    .replace(/ mms$/, '');
 
 const HEADER_TO_FIELD: Record<string, MMSField> = Object.fromEntries(
-  COLUMNS.map(c => [normalizeHeader(c.header), c.field])
+  COLUMNS.flatMap(c => [c.header, ...(HEADER_ALIASES[c.field] ?? [])].map(h => [normalizeHeader(h), c.field]))
 );
 
 export default function MMS() {
@@ -110,24 +122,23 @@ export default function MMS() {
     const lines = text.trim().split(/\r?\n/);
     const records: MMSRecord[] = [];
 
-    // Posição de cada campo: pelo nome no cabeçalho, ou pela ordem padrão se não houver cabeçalho
+    // Posição de cada campo pelo nome no cabeçalho (primeira linha)
     const colIndex: Partial<Record<MMSField, number>> = {};
-    const headerCells = (lines[0] ?? '').split('\t').map(normalizeHeader);
-    const hasHeader = headerCells.some(cell => cell in HEADER_TO_FIELD);
+    (lines[0] ?? '').split('\t').map(normalizeHeader).forEach((cell, i) => {
+      const field = HEADER_TO_FIELD[cell];
+      if (field && colIndex[field] === undefined) colIndex[field] = i;
+    });
 
-    if (hasHeader) {
-      headerCells.forEach((cell, i) => {
-        const field = HEADER_TO_FIELD[cell];
-        if (field && colIndex[field] === undefined) colIndex[field] = i;
-      });
-      if (colIndex[KEY_FIELD] === undefined) {
-        throw new Error(`Coluna "${KEY_HEADER}" não encontrada no cabeçalho`);
-      }
-    } else {
-      COLUMNS.forEach((c, pos) => { colIndex[c.field] = pos; });
+    // Sem cabeçalho ou com coluna faltando, os dados sairiam em branco ou trocados: melhor parar
+    if (colIndex[KEY_FIELD] === undefined) {
+      throw new Error(`Cole os dados junto com a linha de cabeçalho (coluna "${KEY_HEADER}" não encontrada)`);
+    }
+    const faltando = COLUMNS.filter(c => colIndex[c.field] === undefined);
+    if (faltando.length > 0) {
+      throw new Error(`Colunas não encontradas no cabeçalho: ${faltando.map(c => c.header).join(', ')}`);
     }
 
-    for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
+    for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
       const get = (field: MMSField) => {
         const idx = colIndex[field];
