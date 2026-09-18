@@ -159,29 +159,45 @@ export default function MMS() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const { toast } = useToast();
 
-  // Parsear os dados colados (tab-separated)
+  // Parsear os dados colados (tab-separated). Pode vir mais de um relatório colado junto,
+  // cada um com a sua linha de cabeçalho.
   const parseInputData = (text: string): MMSRecord[] => {
     const lines = text.trim().split(/\r?\n/);
     const records: MMSRecord[] = [];
 
-    // Posição de cada campo pelo nome no cabeçalho (primeira linha)
-    const colIndex: Partial<Record<MMSField, number>> = {};
-    (lines[0] ?? '').split('\t').map(normalizeHeader).forEach((cell, i) => {
-      const field = HEADER_TO_FIELD[cell];
-      if (field && colIndex[field] === undefined) colIndex[field] = i;
-    });
+    // Linha de cabeçalho: alguma célula é o nome da coluna chave
+    const isHeader = (cells: string[]) =>
+      cells.some(cell => HEADER_TO_FIELD[normalizeHeader(cell)] === KEY_FIELD);
 
-    // Sem cabeçalho ou com coluna faltando, os dados sairiam em branco ou trocados: melhor parar
-    if (colIndex[KEY_FIELD] === undefined) {
+    // Posição de cada campo pelo nome no cabeçalho. Com coluna faltando os dados sairiam em branco: melhor parar
+    const mapHeader = (cells: string[]) => {
+      const index: Partial<Record<MMSField, number>> = {};
+      cells.map(normalizeHeader).forEach((cell, i) => {
+        const field = HEADER_TO_FIELD[cell];
+        if (field && index[field] === undefined) index[field] = i;
+      });
+      const faltando = COLUMNS.filter(c => index[c.field] === undefined);
+      if (faltando.length > 0) {
+        throw new Error(`Colunas não encontradas no cabeçalho: ${faltando.map(c => c.header).join(', ')}`);
+      }
+      return index;
+    };
+
+    const firstCells = (lines[0] ?? '').split('\t');
+    if (!isHeader(firstCells)) {
       throw new Error(`Cole os dados junto com a linha de cabeçalho (coluna "${KEY_HEADER}" não encontrada)`);
     }
-    const faltando = COLUMNS.filter(c => colIndex[c.field] === undefined);
-    if (faltando.length > 0) {
-      throw new Error(`Colunas não encontradas no cabeçalho: ${faltando.map(c => c.header).join(', ')}`);
-    }
+    let colIndex = mapHeader(firstCells);
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split('\t');
+
+      // Cabeçalho repetido (outro relatório colado junto): não é pedido, só remapeia as colunas
+      if (isHeader(values)) {
+        colIndex = mapHeader(values);
+        continue;
+      }
+
       const get = (field: MMSField) => {
         const idx = colIndex[field];
         return idx === undefined ? '' : values[idx]?.trim() || '';
