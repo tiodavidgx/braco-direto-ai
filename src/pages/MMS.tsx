@@ -107,6 +107,48 @@ const HEADER_TO_FIELD: Record<string, MMSField> = Object.fromEntries(
   COLUMNS.flatMap(c => [c.header, ...(HEADER_ALIASES[c.field] ?? [])].map(h => [normalizeHeader(h), c.field]))
 );
 
+// Planilha extra "MMS - MODELO DE PECAS": uma linha por pedido novo, algumas colunas com valor fixo
+const PECAS_FILE_PREFIX = "MMS - MODELO DE PECAS";
+const PECAS_COLUMNS: { header: string; value: (r: MMSRecord) => string }[] = [
+  { header: "Número do Pedido", value: r => r.numero_pedido },
+  { header: "Filial", value: r => r.filial },
+  { header: "Código do Produto", value: r => r.sku_produto },
+  { header: "Descrição do Produto", value: r => r.descricao_produto },
+  { header: "Número de volumes para o Produto", value: () => "1" },
+  { header: "Código da peça", value: () => "1" },
+  { header: "Descrição da peça", value: () => "Genérico - Solicitar Manualmente" },
+  { header: "Qtde de peças", value: () => "1" },
+];
+
+const pecasRows = (records: MMSRecord[]): string[][] => [
+  PECAS_COLUMNS.map(c => c.header),
+  ...records.map(r => PECAS_COLUMNS.map(c => c.value(r) || '')),
+];
+
+// Gera e baixa um .xlsx (1ª linha = cabeçalho), com a largura das colunas ajustada ao conteúdo
+const downloadXLSX = (rows: string[][], sheetName: string, fileName: string) => {
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = rows[0].map((_, i) => ({
+    wch: Math.min(Math.max(...rows.map(row => String(row[i] || '').length)) + 2, 50)
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, fileName);
+};
+
+// Baixa um texto como arquivo .csv
+const downloadText = (text: string, fileName: string) => {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', fileName);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export default function MMS() {
   const [inputData, setInputData] = useState("");
   const [loading, setLoading] = useState(false);
@@ -314,22 +356,19 @@ export default function MMS() {
     }
   };
 
-  // Baixar como CSV
+  // Baixar como CSV (dados limpos + modelo de peças)
   const handleDownloadCSV = () => {
     if (!outputData) return;
-    
-    const blob = new Blob([outputData], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `mms_limpo_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const hoje = new Date().toISOString().split('T')[0];
+    downloadText(outputData, `mms_limpo_${hoje}.csv`);
+    if (result && result.dados_novos.length > 0) {
+      const pecas = pecasRows(result.dados_novos).map(row => row.join('\t')).join('\n');
+      downloadText(pecas, `${PECAS_FILE_PREFIX}_${hoje}.csv`);
+    }
   };
 
-  // Baixar como XLSX (Excel)
+  // Baixar como XLSX (dados limpos + modelo de peças)
   const handleDownloadXLSX = () => {
     if (!result || result.dados_novos.length === 0) {
       toast({
@@ -340,35 +379,17 @@ export default function MMS() {
       return;
     }
 
-    // Preparar dados com cabeçalhos originais
-    const headers = COLUMNS.map(c => c.header);
-    const data = result.dados_novos.map(record => 
-      COLUMNS.map(c => record[c.field] || '')
+    const hoje = new Date().toISOString().split('T')[0];
+    downloadXLSX(
+      [COLUMNS.map(c => c.header), ...result.dados_novos.map(record => COLUMNS.map(c => record[c.field] || ''))],
+      'Dados Limpos',
+      `mms_limpo_${hoje}.xlsx`
     );
-
-    // Criar worksheet
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    
-    // Ajustar largura das colunas
-    const colWidths = headers.map((h, i) => {
-      const maxLen = Math.max(
-        h.length,
-        ...data.map(row => String(row[i] || '').length)
-      );
-      return { wch: Math.min(maxLen + 2, 50) };
-    });
-    ws['!cols'] = colWidths;
-
-    // Criar workbook
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Dados Limpos');
-
-    // Baixar arquivo
-    XLSX.writeFile(wb, `mms_limpo_${new Date().toISOString().split('T')[0]}.xlsx`);
+    downloadXLSX(pecasRows(result.dados_novos), PECAS_FILE_PREFIX, `${PECAS_FILE_PREFIX}_${hoje}.xlsx`);
 
     toast({
       title: "Download iniciado",
-      description: `Exportando ${result.dados_novos.length} registros para Excel`,
+      description: `Exportando ${result.dados_novos.length} registros para Excel + modelo de peças`,
     });
   };
 
