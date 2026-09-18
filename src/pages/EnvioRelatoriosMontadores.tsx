@@ -25,6 +25,7 @@ import {
 import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
+import { authFetch } from "@/services/api";
 import { montadoresService } from "@/services/montadores.service";
 import { emailConfigService } from "@/services/email-config.service";
 import { Montador } from "@/types/montador";
@@ -181,9 +182,9 @@ Qualquer dúvida, estamos à disposição.`,
       try {
         const API_BASE_URL = getApiBaseUrl();
         
-        // Coletar boletins
+        // Coletar boletins como texto e sem espaços (o backend compara com str(b).strip())
         const boletins: string[] = dataParaEnvio
-          .map(item => item.identificador_boletim_montagem)
+          .map(item => String(item.identificador_boletim_montagem ?? "").trim())
           .filter(Boolean);
 
         if (boletins.length === 0) {
@@ -192,22 +193,36 @@ Qualquer dúvida, estamos à disposição.`,
         }
 
         // Verificar blacklist
-        const blacklistResponse = await fetch(`${API_BASE_URL}/blacklist/boletins/check`, {
+        const blacklistResponse = await authFetch(`${API_BASE_URL}/blacklist/boletins/check`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ numbers: boletins }),
         });
+        if (!blacklistResponse.ok) {
+          console.error("Erro ao verificar blacklist:", blacklistResponse.status);
+        }
 
-        const blacklisted = blacklistResponse.ok ? await blacklistResponse.json() : [];
+        const blacklisted: string[] = blacklistResponse.ok
+          ? (await blacklistResponse.json()).map((b: unknown) => String(b).trim())
+          : [];
 
         // Verificar boletins já enviados
-        const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
+        const sentResponse = await authFetch(`${API_BASE_URL}/relatorios/verificar-boletins-enviados`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ boletins }),
         });
+        if (!sentResponse.ok) {
+          console.error("Erro ao verificar boletins já enviados:", sentResponse.status);
+        }
 
-        const alreadySent = sentResponse.ok ? await sentResponse.json() : [];
+        const alreadySent: string[] = sentResponse.ok
+          ? (await sentResponse.json()).map((b: unknown) => String(b).trim())
+          : [];
+
+        if (!blacklistResponse.ok || !sentResponse.ok) {
+          toast.warning("Não foi possível verificar blacklist/envios anteriores. O status pode estar incompleto.");
+        }
 
         // Criar preview de status
         const preview = boletins.map(boletim => {
@@ -257,7 +272,7 @@ Qualquer dúvida, estamos à disposição.`,
 
   // Adicionar entrada manual
   const adicionarManual = async () => {
-    if (!formMontador.identificador || !formMontador.boletim) {
+    if (!formMontador.identificador || !formMontador.boletim.trim()) {
       toast.error("Preencha os campos obrigatórios: Montador e Boletim");
       return;
     }
@@ -294,7 +309,7 @@ Qualquer dúvida, estamos à disposição.`,
     const entry: MontadorEntry = {
       identificador_do_montador: formMontador.identificador,
       nome_do_montador: montador.nome, // Usar o nome do montador encontrado no banco
-      identificador_boletim_montagem: formMontador.boletim,
+      identificador_boletim_montagem: formMontador.boletim.trim(),
       data_da_montagem: formMontador.data_montagem,
       media_de_valor_venda: valorVenda,
       nome_do_cliente: formMontador.cliente || "-",
@@ -420,7 +435,7 @@ Qualquer dúvida, estamos à disposição.`,
             ...row,
             identificador_do_montador: identificadorExcel, // Garantir que seja string
             nome_do_montador: montador?.nome || row.nome_do_montador || "Desconhecido",
-            identificador_boletim_montagem: String(row.identificador_boletim_montagem || ''),
+            identificador_boletim_montagem: String(row.identificador_boletim_montagem || '').trim(),
             data_da_montagem: row.data_da_montagem,
             media_de_valor_venda: valorVenda,
             nome_do_cliente: row.nome_do_cliente || "-",
@@ -498,7 +513,7 @@ Qualquer dúvida, estamos à disposição.`,
       console.log("📤 DEBUG - Enviando dados:", dataParaEnvio);
       console.log("📤 DEBUG - Primeiro item:", dataParaEnvio[0]);
 
-      const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
+      const response = await authFetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -510,7 +525,7 @@ Qualquer dúvida, estamos à disposição.`,
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.detail || "Erro ao enviar relatórios");
       }
 

@@ -24,10 +24,19 @@ import {
 } from "@/components/ui/table";
 import { Mail, Upload, Send, Plus, Trash2, FileSpreadsheet, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
+import { getApiBaseUrl, authFetch } from "@/services/api";
 import * as XLSX from 'xlsx';
 import { prestadoresService } from "@/services/prestadores.service";
 import { emailConfigService } from "@/services/email-config.service";
 import { Prestador } from "@/types/prestador";
+
+// Mesma normalização do backend (normalize_os_number em relatorios.py):
+// trim, minúsculas e sem o ".0" final que vem de números do Excel
+const normalizarOS = (valor: unknown): string => {
+  let s = String(valor ?? "").trim().toLowerCase();
+  if (s.endsWith(".0")) s = s.slice(0, -2);
+  return s;
+};
 
 // Interfaces baseadas no streamlit original
 interface PrestadorEntry {
@@ -136,10 +145,12 @@ Obrigado.`,
 
       setLoadingPreview(true);
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
+        const API_BASE_URL = getApiBaseUrl();
         
-        // Coletar O.S.
-        const numbers = dataParaEnvio.map(item => item.o_s).filter(Boolean);
+        // Coletar O.S. como texto (o backend espera list[str] e o Excel pode trazer números)
+        const numbers: string[] = dataParaEnvio
+          .map(item => String(item.o_s ?? "").trim())
+          .filter(Boolean);
         const checkEndpoint = "/blacklist/os/check";
 
         if (numbers.length === 0) {
@@ -149,33 +160,43 @@ Obrigado.`,
         }
 
         // Verificar blacklist
-        const blacklistResponse = await fetch(`${API_BASE_URL}${checkEndpoint}`, {
+        const blacklistResponse = await authFetch(`${API_BASE_URL}${checkEndpoint}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ numbers }),
         });
+        if (!blacklistResponse.ok) {
+          console.error("Erro ao verificar blacklist:", blacklistResponse.status);
+        }
 
-        const blacklisted = blacklistResponse.ok 
-          ? (await blacklistResponse.json()).map(String)
+        const blacklisted: string[] = blacklistResponse.ok
+          ? (await blacklistResponse.json()).map(normalizarOS)
           : [];
 
-        // Verificar O.S. já enviadas
-        const sentResponse = await fetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
+        // Verificar O.S. já enviadas (o backend devolve as O.S. já normalizadas)
+        const sentResponse = await authFetch(`${API_BASE_URL}/relatorios/verificar-os-enviadas`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ os_numbers: numbers }),
         });
-        const alreadySent = sentResponse.ok 
-          ? (await sentResponse.json()).map(String)
+        if (!sentResponse.ok) {
+          console.error("Erro ao verificar O.S. já enviadas:", sentResponse.status);
+        }
+        const alreadySent: string[] = sentResponse.ok
+          ? (await sentResponse.json()).map(normalizarOS)
           : [];
 
-        // Criar preview de status
-        const preview = numbers.map(num => {
-          const numStr = String(num); // Garantir que é string para comparação
-          if (blacklisted.includes(numStr)) {
+        if (!blacklistResponse.ok || !sentResponse.ok) {
+          toast.warning("Não foi possível verificar blacklist/envios anteriores. O status pode estar incompleto.");
+        }
+
+        // Criar preview de status (comparando com a mesma normalização do backend)
+        const preview = numbers.map(numStr => {
+          const chave = normalizarOS(numStr);
+          if (blacklisted.includes(chave)) {
             return { number: numStr, status: "Na blacklist", color: "red" };
           }
-          if (alreadySent.includes(numStr)) {
+          if (alreadySent.includes(chave)) {
             return { number: numStr, status: "Já enviado", color: "orange" };
           }
           return { number: numStr, status: "Pendente", color: "green" };
@@ -351,8 +372,8 @@ Obrigado.`,
     toast.info("Enviando relatórios...");
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-      const response = await fetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(`${API_BASE_URL}/relatorios/enviar-lote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

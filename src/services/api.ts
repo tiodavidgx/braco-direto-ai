@@ -7,7 +7,7 @@
 
 // Função para obter a URL base da API
 // É chamada em runtime para garantir acesso ao window.location
-const getApiBaseUrl = (): string => {
+export const getApiBaseUrl = (): string => {
   // Se variável de ambiente está definida, usa ela
   const envUrl = import.meta.env.VITE_API_BASE_URL;
   if (envUrl && envUrl !== '') {
@@ -62,6 +62,23 @@ export function handleUnauthorized(): void {
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
     window.location.assign('/login?expired=1');
   }
+}
+
+/**
+ * fetch com o token do usuário logado (para páginas que não usam o apiClient).
+ * Em 401 limpa a sessão e manda para /login.
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const response = await fetch(input, { ...init, headers });
+  if (response.status === 401) {
+    handleUnauthorized();
+  }
+  return response;
 }
 
 let refreshInFlight: Promise<void> | null = null;

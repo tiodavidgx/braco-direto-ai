@@ -27,6 +27,9 @@ JWT_ALGORITHM = "HS256"
 # Padrão: 1 ano (8760h). Sessão fica viva até o usuário fazer logout explícito,
 # trocar a senha, ser desativado, ou ficar 1 ano sem abrir o sistema.
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "8760"))
+# Token interno (serviço -> API): curta duração e só para serviços conhecidos
+INTERNAL_TOKEN_MINUTES = 10
+INTERNAL_SERVICES = {"auto_envio"}
 
 
 class LoginRequest(BaseModel):
@@ -120,11 +123,39 @@ def _verify_recaptcha(recaptcha_token: str) -> bool:
         return True  # Em caso de erro, não bloqueia
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Dependency para obter usuário atual do token"""
-    token = credentials.credentials
-    payload = decode_token(token)
-    
+def create_internal_token(svc: str) -> str:
+    """
+    Cria token JWT interno de curta duração para chamadas serviço -> API
+    (ex: job de envio automático chamando /relatorios/enviar-lote).
+    Não tem user_id, então nunca passa como token de usuário.
+    """
+    if svc not in INTERNAL_SERVICES:
+        raise ValueError(f"Serviço interno desconhecido: {svc}")
+    agora = datetime.utcnow()
+    payload = {
+        "internal": True,
+        "svc": svc,
+        "exp": agora + timedelta(minutes=INTERNAL_TOKEN_MINUTES),
+        "iat": agora
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _is_internal_payload(payload: dict) -> bool:
+    """Token interno: internal == true, serviço conhecido e sem user_id"""
+    return (
+        payload.get("internal") is True
+        and payload.get("svc") in INTERNAL_SERVICES
+        and "user_id" not in payload
+    )
+
+
+def _get_user_from_payload(payload: dict) -> dict:
+    """Busca o usuário do token e valida se existe e está ativo"""
+    # Token interno (ou sem user_id) nunca é aceito como usuário
+    if payload.get("internal") or "user_id" not in payload:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
@@ -140,6 +171,23 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             raise HTTPException(status_code=401, detail="Usuário desativado")
         
         return dict(user)
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Dependency para obter usuário atual do token"""
+    payload = decode_token(credentials.credentials)
+    return _get_user_from_payload(payload)
+
+
+def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """
+    Dependency que aceita token de usuário (mesmas regras de get_current_user)
+    OU token interno de serviço gerado por create_internal_token.
+    """
+    payload = decode_token(credentials.credentials)
+    if _is_internal_payload(payload):
+        return {"id": None, "internal": True, "svc": payload["svc"], "role": "internal"}
+    return _get_user_from_payload(payload)
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:

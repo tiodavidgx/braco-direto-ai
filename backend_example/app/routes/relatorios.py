@@ -3,7 +3,7 @@ Rotas de Relatórios e Envio de Email
 Gera PDFs e envia por email usando Microsoft Graph API
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -22,8 +22,10 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from app.utils.whatsapp_automation import enviar_notificacao_whatsapp
+from app.routes._auth_deps import get_current_user_or_internal
 
-router = APIRouter()
+# Todas as rotas exigem login (JWT do usuário) ou token interno do job de envio automático
+router = APIRouter(dependencies=[Depends(get_current_user_or_internal)])
 
 # Modelos
 class EnvioRelatorioRequest(BaseModel):
@@ -178,15 +180,18 @@ def check_os_blacklist(os_numbers):
     if not os_numbers:
         return []
     
-    # Converter todos os números para string
-    os_numbers_str = [str(os) for os in os_numbers]
+    # Normalizar igual a check_os_sent: o retorno é comparado com normalize_os_number()
+    os_numbers_str = list({normalize_os_number(os) for os in os_numbers} - {""})
+    
+    if not os_numbers_str:
+        return []
     
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT DISTINCT os_numero 
+                SELECT DISTINCT REGEXP_REPLACE(LOWER(TRIM(os_numero)), '\\.0$', '') AS os_numero
                 FROM os_blacklist 
-                WHERE os_numero = ANY(%s)
+                WHERE REGEXP_REPLACE(LOWER(TRIM(os_numero)), '\\.0$', '') = ANY(%s)
             """, (os_numbers_str,))
             
             blacklisted_os = [row['os_numero'] for row in cur.fetchall()]
@@ -251,15 +256,15 @@ def check_boletins_blacklist(boletins):
     if not boletins:
         return []
     
-    # Converter todos os boletins para string
-    boletins_str = [str(b) for b in boletins]
+    # Converter todos os boletins para string (sem espaços, igual a check_boletins_sent)
+    boletins_str = [str(b).strip() for b in boletins if b]
     
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT DISTINCT boletim 
+                SELECT DISTINCT TRIM(boletim) AS boletim
                 FROM boletins_blacklist 
-                WHERE boletim = ANY(%s)
+                WHERE TRIM(boletim) = ANY(%s)
             """, (boletins_str,))
             
             blacklisted_boletins = [row['boletim'] for row in cur.fetchall()]
@@ -1359,7 +1364,7 @@ def enviar_lote_relatorios(request: dict):
     
     else:  # montador
         # Coletar todos os boletins
-        all_boletins = [item.get("identificador_boletim_montagem", "") for item in dados if item.get("identificador_boletim_montagem")]
+        all_boletins = [str(item.get("identificador_boletim_montagem")).strip() for item in dados if item.get("identificador_boletim_montagem")]
         
         # Verificar blacklist e envios anteriores
         sent_boletins = check_boletins_sent(all_boletins)
@@ -1387,7 +1392,7 @@ def enviar_lote_relatorios(request: dict):
         # Filtrar dados para enviar apenas os pendentes
         dados_filtrados = []
         for item in dados:
-            boletim = item.get("identificador_boletim_montagem", "")
+            boletim = str(item.get("identificador_boletim_montagem") or "").strip()
             if boletim in blacklisted_boletins:
                 print(f"   ⚠️  Boletim {boletim} - Na blacklist (ignorado)")
                 ignorados += 1
@@ -1795,12 +1800,13 @@ def enviar_lote_relatorios(request: dict):
                     
                     # SEMPRE criar novo registro (não reutilizar por período)
                     # Cada envio deve ter seu próprio lote e link único
+                    # quantidade_os conta os itens gravados em detalhes (inclui ajustes A-*), igual ao reenvio
                     cur.execute("""
                         INSERT INTO envios_montagem 
                         (montador_id, montador_nome, periodo, valor_total, data_envio, data_vencimento_pagamento, status, quantidade_os, detalhes)
                         VALUES (%s, %s, %s, %s, NOW(), %s, 'Em Aberto', %s, %s)
                         RETURNING id
-                    """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], data_vencimento_montador, len(itens), psycopg2.extras.Json(detalhes_json)))
+                    """, (destinatario_id, nome_destinatario, periodo, detalhes_json['total_geral'], data_vencimento_montador, len(items_processados), psycopg2.extras.Json(detalhes_json)))
                     lote_id = cur.fetchone()['id']
                     print(f"   ✅ Novo envio #{lote_id} criado no banco (período: {periodo_relatorio})")
 
@@ -2370,6 +2376,21 @@ def enviar_lote_relatorios(request: dict):
 
 # ===== HISTÓRICO DE ENVIOS =====
 
+def normalizar_status(status) -> str:
+    """
+    Normaliza status para comparação (mesma regra do frontend):
+    maiúsculas, remove todo '.', colapsa espaços e faz trim.
+    Ex: 'N.F. RECEBIDA' / 'N.F RECEBIDA' -> 'NF RECEBIDA', 'Em Aberto' -> 'EM ABERTO'
+    """
+    import re
+    return re.sub(r'\s+', ' ', str(status or '').upper().replace('.', '')).strip()
+
+
+def _sql_status_normalizado(coluna: str) -> str:
+    """Expressão SQL equivalente a normalizar_status() para a coluna informada"""
+    return f"UPPER(TRIM(REGEXP_REPLACE(REPLACE({coluna}, '.', ''), '[[:space:]]+', ' ', 'g')))"
+
+
 @router.get("/historico")
 def get_historico_envios(
     tipo: Optional[str] = Query(None, description="Filtrar por tipo: 'prestador' ou 'montador'"),
@@ -2389,6 +2410,8 @@ def get_historico_envios(
     import psycopg2.extras
     
     historico = []
+    # Filtro de status compara valores normalizados ('N.F RECEBIDA' == 'NF RECEBIDA')
+    status_norm = normalizar_status(status) if status else ''
     
     with get_db_connection() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2417,9 +2440,9 @@ def get_historico_envios(
                 LEFT JOIN os_enviadas os ON os.lote_id = l.id
             """
             
-            if status:
-                query_prestador += " WHERE l.status = %s"
-                cur.execute(query_prestador + " GROUP BY l.id ORDER BY l.data_envio DESC", (status,))
+            if status_norm:
+                query_prestador += f" WHERE {_sql_status_normalizado('l.status')} = %s"
+                cur.execute(query_prestador + " GROUP BY l.id ORDER BY l.data_envio DESC", (status_norm,))
             else:
                 cur.execute(query_prestador + " GROUP BY l.id ORDER BY l.data_envio DESC")
             
@@ -2452,9 +2475,9 @@ def get_historico_envios(
                 JOIN montadores m ON m.id = em.montador_id
             """
             
-            if status:
-                query_montador += " WHERE em.status = %s"
-                cur.execute(query_montador + " ORDER BY em.data_envio DESC", (status,))
+            if status_norm:
+                query_montador += f" WHERE {_sql_status_normalizado('em.status')} = %s"
+                cur.execute(query_montador + " ORDER BY em.data_envio DESC", (status_norm,))
             else:
                 cur.execute(query_montador + " ORDER BY em.data_envio DESC")
             
@@ -2949,7 +2972,7 @@ def download_relatorio_pdf(tipo: str, lote_id: int):
         else:  # montador
             # Buscar envio de montador
             cur.execute("""
-                SELECT em.*, m.nome as montador_nome, m.email, m.cpf_cnpj,
+                SELECT em.*, m.nome as montador_nome, m.email,
                        m.percentual_montagem, m.percentual_assistencia, m.percentual_desmontagem
                 FROM envios_montagem em
                 JOIN montadores m ON m.id = em.montador_id
@@ -2972,6 +2995,17 @@ def download_relatorio_pdf(tipo: str, lote_id: int):
             if not permanent_path.exists():
                 # Gerar PDF do montador
                 envio_data = dict(envio)
+                # Totais, percentuais e itens do envio ficam no JSONB detalhes
+                detalhes_envio = envio_data.get('detalhes') or {}
+                if not isinstance(detalhes_envio, dict):
+                    detalhes_envio = {}
+                envio_data.update(detalhes_envio)
+                # Envios antigos (antes de nov/2025) guardam total_comissao / percentual_comissao (em %)
+                if 'total_montagem' not in detalhes_envio and 'total_comissao' in detalhes_envio:
+                    envio_data['total_montagem'] = detalhes_envio['total_comissao']
+                if 'percentual_montagem' not in detalhes_envio and detalhes_envio.get('percentual_comissao') is not None:
+                    envio_data['percentual_montagem'] = float(detalhes_envio['percentual_comissao']) / 100
+                envio_data['detalhes'] = detalhes_envio
                 envio_data['id'] = lote_id
                 
                 try:
@@ -3095,7 +3129,8 @@ def get_envio_para_editar(envio_id: int, tipo: str = Query(..., description="Tip
                 'email': lote['email'],
                 'periodo': lote['periodo'],
                 'valor_total': float(lote['valor_total'] or 0),
-                'quantidade_os': lote['quantidade_os'],
+                # lotes_servico não tem quantidade_os: conta as O.S. do lote (igual ao /historico)
+                'quantidade_os': len(os_items),
                 'data_envio': lote['data_envio'].isoformat() if lote['data_envio'] else None,
                 'status': lote['status'],
                 'items_atuais': items_atuais,

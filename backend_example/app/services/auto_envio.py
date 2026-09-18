@@ -12,7 +12,6 @@ from app.database import get_db_connection
 
 
 API_INTERNAL_URL = os.getenv("API_INTERNAL_URL", "http://localhost:14001")
-API_INTERNAL_TOKEN = os.getenv("API_INTERNAL_TOKEN", "")
 
 
 def _calcular_periodo_ciclo(dias_envio: List[int], hoje: date) -> Tuple[date, date]:
@@ -26,11 +25,16 @@ def _calcular_periodo_ciclo(dias_envio: List[int], hoje: date) -> Tuple[date, da
 
 
 def _get_internal_auth_header() -> Dict[str, str]:
-    """Obtém header de autenticação para chamadas internas"""
-    headers = {"Content-Type": "application/json"}
-    if API_INTERNAL_TOKEN:
-        headers["Authorization"] = f"Bearer {API_INTERNAL_TOKEN}"
-    return headers
+    """
+    Obtém header de autenticação para chamadas internas.
+    Gera um JWT interno novo (curta duração) a cada chamada; as rotas de
+    /relatorios aceitam esse token via get_current_user_or_internal.
+    """
+    from app.routes.sistema_auth import create_internal_token
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {create_internal_token('auto_envio')}",
+    }
 
 
 def _buscar_email_config(tipo: str = "montador", template_id: int = None) -> Dict[str, str]:

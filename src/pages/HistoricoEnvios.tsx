@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { getApiBaseUrl, authFetch } from "@/services/api";
+
+// Normaliza o status para comparar (mesma regra do backend): trim, maiúsculas, sem pontos
+// e espaços colapsados. Ex.: "N.F. RECEBIDA" / "N.F RECEBIDA" -> "NF RECEBIDA", "Pago" -> "PAGO"
+const normalizarStatus = (status?: string | null) =>
+  (status || "").trim().toUpperCase().replace(/\./g, "").replace(/\s+/g, " ");
+
+const STATUS_LABELS: Record<string, string> = {
+  "EM ABERTO": "Em Aberto",
+  "NF RECEBIDA": "N.F. Recebida",
+  "PAGO": "Pago",
+};
+
+// Rótulo amigável do status (status desconhecido aparece como veio do banco)
+const statusLabel = (status?: string | null) =>
+  STATUS_LABELS[normalizarStatus(status)] || status || "";
+
+const isPago = (status?: string | null) => normalizarStatus(status) === "PAGO";
+
+// /historico junta lotes de prestador e envios de montador (tabelas diferentes),
+// então o mesmo id existe nos dois tipos — a chave de um envio é tipo + id
+const chaveEnvio = (item: { tipo: string; id: number }) => `${item.tipo}-${item.id}`;
+
+// validade_link é DATE ("YYYY-MM-DD"): new Date("YYYY-MM-DD") é meia-noite UTC e no
+// Brasil aparece como o dia anterior às 21h. Monta a data no fuso local e mostra só o dia.
+const formatarDataSemHora = (valor: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  const data = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(valor);
+  return isNaN(data.getTime()) ? valor : data.toLocaleDateString("pt-BR");
+};
 
 interface OSItem {
   id: number;
@@ -123,9 +153,13 @@ export default function HistoricoEnvios() {
   const [searchTerm, setSearchTerm] = useState("");
   const [historico, setHistorico] = useState<HistoricoItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openDialogId, setOpenDialogId] = useState<number | null>(null);
+  // Chave (tipo + id) do envio com o dialog de detalhes aberto
+  const [openDialogKey, setOpenDialogKey] = useState<string | null>(null);
   const [osItems, setOsItems] = useState<OSItem[]>([]);
   const [loadingOS, setLoadingOS] = useState(false);
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
+  // Lote pedido pelo "Ver Lote" da busca que não estava na lista: abre quando o histórico recarregar
+  const loteParaAbrirRef = useRef<{ tipo: string; id: number } | null>(null);
   
   // Estados para busca de OS/Boletim
   const [buscaOS, setBuscaOS] = useState("");
@@ -163,9 +197,12 @@ export default function HistoricoEnvios() {
 
   // Carregar histórico da API
   const carregarHistorico = async () => {
+    // Consumir o lote pendente do "Ver Lote" já aqui, para não abrir depois de um erro
+    const pendente = loteParaAbrirRef.current;
+    loteParaAbrirRef.current = null;
     try {
       setLoading(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
+      const API_BASE_URL = getApiBaseUrl();
       
       // Montar query params
       const params = new URLSearchParams();
@@ -177,11 +214,21 @@ export default function HistoricoEnvios() {
       }
       
       const url = `${API_BASE_URL}/relatorios/historico${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
 
       if (response.ok) {
-        const data = await response.json();
+        const data: HistoricoItem[] = await response.json();
         setHistorico(data);
+
+        // Abrir o lote pendente do "Ver Lote" (se houver)
+        if (pendente) {
+          const item = data.find(h => chaveEnvio(h) === chaveEnvio(pendente));
+          if (item) {
+            handleOpenDialog(item);
+          } else {
+            toast.error(`Lote #${pendente.id} não encontrado no histórico`);
+          }
+        }
       } else {
         toast.error("Erro ao carregar histórico");
       }
@@ -215,8 +262,8 @@ export default function HistoricoEnvios() {
     try {
       setBuscandoOS(true);
       setMostrarResultados(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-      const response = await fetch(`${API_BASE_URL}/relatorios/historico/buscar?q=${encodeURIComponent(buscaOS.trim())}`);
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(`${API_BASE_URL}/relatorios/historico/buscar?q=${encodeURIComponent(buscaOS.trim())}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -241,8 +288,8 @@ export default function HistoricoEnvios() {
   const loadOSItems = async (loteId: number, tipo: string) => {
     try {
       setLoadingOS(true);
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-      const response = await fetch(`${API_BASE_URL}/relatorios/historico/${loteId}/os?tipo=${tipo}`);
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(`${API_BASE_URL}/relatorios/historico/${loteId}/os?tipo=${tipo}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -260,28 +307,50 @@ export default function HistoricoEnvios() {
 
   // Abrir dialog e carregar O.S.
   const handleOpenDialog = (item: HistoricoItem) => {
-    setOpenDialogId(item.id);
+    setOpenDialogKey(chaveEnvio(item));
     setOsItems([]);
     loadOSItems(item.id, item.tipo);
   };
 
+  // "Ver Lote" de um resultado da busca de O.S./Boletim
+  const abrirLoteDaBusca = (r: { lote_id: number; tipo: string }) => {
+    const alvo = { tipo: r.tipo, id: r.lote_id };
+    // O dialog fica dentro da linha da tabela: limpar o filtro de texto para a linha aparecer
+    setSearchTerm("");
+
+    const itemHistorico = historico.find(h => chaveEnvio(h) === chaveEnvio(alvo));
+    if (itemHistorico) {
+      handleOpenDialog(itemHistorico);
+      return;
+    }
+
+    // Fora da lista atual (filtro de tipo/status escondendo, ou lote novo): recarregar sem filtros e abrir
+    loteParaAbrirRef.current = alvo;
+    if (tipoFiltro === "todos" && statusFiltro === "todos") {
+      carregarHistorico();
+    } else {
+      setTipoFiltro("todos");
+      setStatusFiltro("todos");
+    }
+  };
+
   const handleDelete = async (id: number, tipo: string) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
+      const API_BASE_URL = getApiBaseUrl();
       const endpoint = tipo === "prestador" 
         ? `${API_BASE_URL}/relatorios/historico-envios/prestador/${id}`
         : `${API_BASE_URL}/relatorios/historico-envios/montador/${id}`;
       
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         toast.success(`${tipo === "prestador" ? "Lote" : "Envio"} excluído com sucesso!`);
         // Fechar o dialog
-        setOpenDialogId(null);
-        // Recarregar histórico
-        setHistorico(prevHistorico => prevHistorico.filter(item => item.id !== id));
+        setOpenDialogKey(null);
+        // Tirar da lista só o registro desse tipo (prestador e montador podem ter o mesmo id)
+        setHistorico(prevHistorico => prevHistorico.filter(item => chaveEnvio(item) !== chaveEnvio({ tipo, id })));
       } else {
         const error = await response.json();
         toast.error(error.detail || "Erro ao excluir");
@@ -300,8 +369,8 @@ export default function HistoricoEnvios() {
     setShowAddItems(false);
     
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-      const response = await fetch(
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(
         `${API_BASE_URL}/relatorios/envio/${item.id}/editar-detalhes?tipo=${item.tipo}`
       );
       
@@ -444,8 +513,8 @@ export default function HistoricoEnvios() {
     setSavingEdit(true);
     
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-      const response = await fetch(
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(
         `${API_BASE_URL}/relatorios/envio/${editandoEnvio.id}/editar-reenviar`,
         {
           method: 'PUT',
@@ -464,7 +533,7 @@ export default function HistoricoEnvios() {
         // Lote original foi deletado e novo criado - recarregar histórico completo
         setEditDialogOpen(false);
         setEditandoEnvio(null);
-        setOpenDialogId(null);
+        setOpenDialogKey(null);
         
         // Recarregar dados do servidor
         carregarHistorico();
@@ -480,13 +549,56 @@ export default function HistoricoEnvios() {
     }
   };
 
+  // Baixar PDF do relatório com o token (uma aba nova via window.open não manda o Authorization)
+  const baixarPdf = async (item: HistoricoItem) => {
+    try {
+      setBaixandoPdf(true);
+      const API_BASE_URL = getApiBaseUrl();
+      const response = await authFetch(`${API_BASE_URL}/relatorios/download-relatorio/${item.tipo}/${item.id}`);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        toast.error(error?.detail || "Erro ao baixar PDF");
+        return;
+      }
+
+      const blob = await response.blob();
+      // Nome do arquivo vem no Content-Disposition do backend (filename* quando tem acento)
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+      let nomeArquivo = `Relatorio_${item.tipo}_${item.id}.pdf`;
+      if (match) {
+        try {
+          nomeArquivo = match[1] ? decodeURIComponent(match[1]) : match[2];
+        } catch {
+          // mantém o nome padrão
+        }
+      }
+
+      // <a download> em vez de window.open: não é barrado como popup depois do await
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', nomeArquivo);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // Liberar o blob depois que o navegador já pegou o arquivo
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error("Erro ao baixar PDF:", error);
+      toast.error("Erro ao baixar PDF");
+    } finally {
+      setBaixandoPdf(false);
+    }
+  };
+
   const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "Pago":
+    switch (normalizarStatus(status)) {
+      case "PAGO":
         return "default";
-      case "Aguardando NF":
-        return "secondary";
-      case "N.F. RECEBIDA":
+      case "NF RECEBIDA":
         return "outline";
       default:
         return "secondary";
@@ -497,7 +609,7 @@ export default function HistoricoEnvios() {
   const totalEnvios = historico.length;
   const totalValor = historico.reduce((acc, item) => acc + item.valor_total, 0);
   const totalOS = historico.reduce((acc, item) => acc + item.quantidade_os, 0);
-  const totalPagos = historico.filter(item => item.status === "Pago").length;
+  const totalPagos = historico.filter(item => isPago(item.status)).length;
 
   // Exportar para CSV
   const exportarCSV = () => {
@@ -510,7 +622,7 @@ export default function HistoricoEnvios() {
       item.quantidade_os,
       item.valor_total.toFixed(2),
       new Date(item.data_envio).toLocaleString('pt-BR'),
-      item.status
+      statusLabel(item.status)
     ]);
     
     const csvContent = [
@@ -698,24 +810,13 @@ export default function HistoricoEnvios() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant={r.status === "Pago" ? "default" : "outline"}>
-                            {r.status}
+                          <Badge variant={isPago(r.status) ? "default" : "outline"}>
+                            {statusLabel(r.status)}
                           </Badge>
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => {
-                              // Encontrar o item no histórico e abrir detalhes
-                              const itemHistorico = historico.find(
-                                h => h.id === r.lote_id && h.tipo === r.tipo
-                              );
-                              if (itemHistorico) {
-                                handleOpenDialog(itemHistorico);
-                              } else {
-                                toast.info("Carregando lote...");
-                                // Se não está no histórico atual, rolar para mostrar o lote
-                              }
-                            }}
+                            onClick={() => abrirLoteDaBusca(r)}
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             Ver Lote
@@ -757,8 +858,7 @@ export default function HistoricoEnvios() {
                 <SelectContent>
                   <SelectItem value="todos">⚪ Todos os Status</SelectItem>
                   <SelectItem value="Em Aberto">⏳ Em Aberto</SelectItem>
-                  <SelectItem value="Aguardando NF">📄 Aguardando NF</SelectItem>
-                  <SelectItem value="N.F. RECEBIDA">✅ N.F. RECEBIDA</SelectItem>
+                  <SelectItem value="N.F. RECEBIDA">✅ N.F. Recebida</SelectItem>
                   <SelectItem value="Pago">💰 Pago</SelectItem>
                 </SelectContent>
               </Select>
@@ -790,7 +890,7 @@ export default function HistoricoEnvios() {
                 {filteredData.map((item) => {
                   const nome = item.prestador_nome || item.montador_nome || "N/A";
                   return (
-                    <Card key={item.id} className="overflow-hidden">
+                    <Card key={chaveEnvio(item)} className="overflow-hidden">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2">
@@ -800,9 +900,9 @@ export default function HistoricoEnvios() {
                             </Badge>
                           </div>
                           <Badge variant={getStatusVariant(item.status)} className={`text-xs ${
-                            item.status === "Pago" ? "bg-green-100 text-green-700 border-green-300" : ""
+                            isPago(item.status) ? "bg-green-100 text-green-700 border-green-300" : ""
                           }`}>
-                            {item.status}
+                            {statusLabel(item.status)}
                           </Badge>
                         </div>
                         
@@ -837,11 +937,11 @@ export default function HistoricoEnvios() {
                             <Badge variant="outline" className="bg-yellow-100 text-yellow-700 text-xs">⏳ Pendente</Badge>
                           )}
                           
-                          <Dialog open={openDialogId === item.id} onOpenChange={(open) => {
+                          <Dialog open={openDialogKey === chaveEnvio(item)} onOpenChange={(open) => {
                             if (open) {
                               handleOpenDialog(item);
                             } else {
-                              setOpenDialogId(null);
+                              setOpenDialogKey(null);
                               setOsItems([]);
                             }
                           }}>
@@ -880,9 +980,13 @@ export default function HistoricoEnvios() {
                   <TableBody>
                     {filteredData.map((item) => {
                       const nome = item.prestador_nome || item.montador_nome || "N/A";
+                      const aberto = openDialogKey === chaveEnvio(item);
+                      // Quantidade real do grid depois de carregado (envios de montador com ajustes A-*
+                      // têm mais itens que o quantidade_os gravado); enquanto carrega usa o gravado
+                      const qtdItens = aberto && !loadingOS && osItems.length > 0 ? osItems.length : item.quantidade_os;
                       
                       return (
-                      <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
+                      <TableRow key={chaveEnvio(item)} className="hover:bg-muted/50 transition-colors">
                         <TableCell>
                           <Badge variant="outline" className="font-mono">#{item.id}</Badge>
                         </TableCell>
@@ -913,9 +1017,9 @@ export default function HistoricoEnvios() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={getStatusVariant(item.status)} className={
-                            item.status === "Pago" ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-400" : ""
+                            isPago(item.status) ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-400" : ""
                           }>
-                            {item.status}
+                            {statusLabel(item.status)}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -940,11 +1044,11 @@ export default function HistoricoEnvios() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Dialog open={openDialogId === item.id} onOpenChange={(open) => {
+                          <Dialog open={aberto} onOpenChange={(open) => {
                             if (open) {
                               handleOpenDialog(item);
                             } else {
-                              setOpenDialogId(null);
+                              setOpenDialogKey(null);
                               setOsItems([]);
                             }
                           }}>
@@ -971,7 +1075,7 @@ export default function HistoricoEnvios() {
                                   <TabsTrigger value="info" className="text-xs sm:text-sm">📋 Informações</TabsTrigger>
                                   <TabsTrigger value="grid" className="text-xs sm:text-sm">
                                     <Grid3x3 className="h-4 w-4 mr-1 md:mr-2" />
-                                    {item.tipo === 'prestador' ? 'O.S.' : 'Boletins'} ({item.quantidade_os})
+                                    {item.tipo === 'prestador' ? 'O.S.' : 'Boletins'} ({qtdItens})
                                   </TabsTrigger>
                                 </TabsList>
                                 
@@ -999,7 +1103,7 @@ export default function HistoricoEnvios() {
                                               </Badge>
                                             </div>
                                             <p className="text-sm text-muted-foreground">
-                                              {item.tipo === 'prestador' ? 'Relatório de prestador' : 'Relatório de montador'} gerado com {item.quantidade_os} {item.tipo === 'prestador' ? 'O.S.' : 'itens'}
+                                              {item.tipo === 'prestador' ? 'Relatório de prestador' : 'Relatório de montador'} gerado com {qtdItens} {item.tipo === 'prestador' ? 'O.S.' : 'itens'}
                                             </p>
                                           </div>
                                         </div>
@@ -1063,24 +1167,24 @@ export default function HistoricoEnvios() {
                                         {/* Pagamento */}
                                         <div className="flex gap-4">
                                           <div className="flex flex-col items-center">
-                                            <div className={`w-3 h-3 rounded-full ${item.status === 'Pago' ? 'bg-green-600' : 'bg-muted'}`}></div>
+                                            <div className={`w-3 h-3 rounded-full ${isPago(item.status) ? 'bg-green-600' : 'bg-muted'}`}></div>
                                           </div>
                                           <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                              <span className={`font-semibold ${item.status !== 'Pago' && 'text-muted-foreground'}`}>
+                                              <span className={`font-semibold ${!isPago(item.status) && 'text-muted-foreground'}`}>
                                                 Pagamento Realizado
                                               </span>
-                                              {item.status === 'Pago' && (
+                                              {isPago(item.status) && (
                                                 <Badge className="text-xs bg-green-600">
                                                   ✓ Concluído
                                                 </Badge>
                                               )}
                                             </div>
                                             <p className="text-sm text-muted-foreground">
-                                              {item.status === 'Pago' ? (
+                                              {isPago(item.status) ? (
                                                 <>Pagamento confirmado - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total)}</>
                                               ) : (
-                                                <>Aguardando pagamento - Status: {item.status}</>
+                                                <>Aguardando pagamento - Status: {statusLabel(item.status)}</>
                                               )}
                                             </p>
                                           </div>
@@ -1107,7 +1211,7 @@ export default function HistoricoEnvios() {
                                       </CardHeader>
                                       <CardContent className="p-3 md:p-6 pt-0">
                                         <Badge variant={getStatusVariant(item.status)} className="text-sm md:text-base">
-                                          {item.status}
+                                          {statusLabel(item.status)}
                                         </Badge>
                                       </CardContent>
                                     </Card>
@@ -1129,7 +1233,7 @@ export default function HistoricoEnvios() {
                                       </CardHeader>
                                       <CardContent className="p-3 md:p-6 pt-0">
                                         <p className="text-lg md:text-2xl font-bold">
-                                          {item.quantidade_os} {item.tipo === "prestador" ? "O.S." : "itens"}
+                                          {qtdItens} {item.tipo === "prestador" ? "O.S." : "itens"}
                                         </p>
                                       </CardContent>
                                     </Card>
@@ -1148,8 +1252,7 @@ export default function HistoricoEnvios() {
                                         </code>
                                         {item.validade_link && (
                                           <p className="text-xs text-muted-foreground mt-2">
-                                            ⏰ Válido até: {new Date(item.validade_link).toLocaleDateString("pt-BR")} às{" "}
-                                            {new Date(item.validade_link).toLocaleTimeString("pt-BR")}
+                                            ⏰ Válido até: {formatarDataSemHora(item.validade_link)}
                                           </p>
                                         )}
                                       </CardContent>
@@ -1175,12 +1278,14 @@ export default function HistoricoEnvios() {
                                     <Button 
                                       variant="outline" 
                                       className="flex-1 gap-2"
-                                      onClick={() => {
-                                        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:14001/api/v1';
-                                        window.open(`${API_BASE_URL}/relatorios/download-relatorio/${item.tipo}/${item.id}`, '_blank');
-                                      }}
+                                      disabled={baixandoPdf}
+                                      onClick={() => baixarPdf(item)}
                                     >
-                                      <Download className="h-4 w-4" />
+                                      {baixandoPdf ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Download className="h-4 w-4" />
+                                      )}
                                       <span className="hidden sm:inline">Baixar</span> PDF
                                     </Button>
                                     
