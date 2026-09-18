@@ -7,6 +7,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   FileSpreadsheet,
   Download,
   Upload,
@@ -16,10 +27,12 @@ import {
   Copy,
   RefreshCw,
   BarChart3,
-  History
+  History,
+  Trash2
 } from "lucide-react";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 
 interface ProcessResult {
@@ -157,7 +170,9 @@ export default function MMS() {
   const [outputData, setOutputData] = useState("");
   const [logs, setLogs] = useState<ImportLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [apagandoId, setApagandoId] = useState<number | null>(null);
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   // Parsear os dados colados (tab-separated). Pode vir mais de um relatório colado junto,
   // cada um com a sua linha de cabeçalho.
@@ -358,6 +373,28 @@ export default function MMS() {
       console.error('Erro ao carregar logs:', error);
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  // Apagar um lote do histórico (só administrador): tira do banco os pedidos gravados nele
+  const handleApagarImportacao = async (log: ImportLog) => {
+    setApagandoId(log.id);
+    try {
+      const response: { pedidos_removidos: number } = await apiClient.delete(`/mms/importacoes/${log.id}`);
+      toast({
+        title: "Importação apagada",
+        description: `${response.pedidos_removidos} pedidos removidos do banco`,
+      });
+      carregarLogs();
+      carregarEstatisticas();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao apagar importação",
+        description: error.message || "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setApagandoId(null);
     }
   };
 
@@ -667,6 +704,7 @@ Os dados devem estar separados por TAB (como quando copia do Excel)"
                         <TableHead className="text-right">Novos</TableHead>
                         <TableHead className="text-right">Duplicados</TableHead>
                         <TableHead>Usuário</TableHead>
+                        {isAdmin && <TableHead className="w-12" />}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -683,6 +721,42 @@ Os dados devem estar separados por TAB (como quando copia do Excel)"
                             {log.total_duplicados}
                           </TableCell>
                           <TableCell>{log.usuario_nome || '—'}</TableCell>
+                          {isAdmin && (
+                            <TableCell>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive"
+                                    disabled={apagandoId !== null}
+                                    title="Apagar importação"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Apagar importação?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Importação de {new Date(log.criado_em).toLocaleString('pt-BR')} feita por {log.usuario_nome || '—'}.
+                                      {" "}Os {log.total_novos} pedidos novos desse lote saem do banco e voltam a aparecer como novos na próxima colagem.
+                                      {" "}Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleApagarImportacao(log)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Apagar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>

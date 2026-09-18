@@ -3,14 +3,16 @@ Rotas para processamento de dados MMS
 Verifica duplicidade pelo Número do Pedido e gera relatórios limpos
 """
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from psycopg2.extras import Json
 from app.database import get_db_connection
-from app.routes.sistema_auth import get_current_user
+from app.routes.sistema_auth import get_current_user, require_admin
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _ensure_import_log_table(cursor):
@@ -188,6 +190,55 @@ def listar_importacoes(current_user: dict = Depends(get_current_user)):
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erro ao listar importações: {str(e)}")
+        finally:
+            cursor.close()
+
+
+@router.delete("/importacoes/{importacao_id}")
+def apagar_importacao(importacao_id: int, current_user: dict = Depends(require_admin)):
+    """
+    Apaga um lote de importação (só administrador): remove do banco os pedidos gravados
+    nele e a linha do histórico. Os pedidos voltam a aparecer como novos na próxima colagem.
+    O lote é identificado pelo horário: pedidos e log são gravados na mesma transação,
+    então têm o mesmo criado_em.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "SELECT criado_em, total_novos, usuario_nome FROM mms_importacoes WHERE id = %s",
+                (importacao_id,)
+            )
+            importacao = cursor.fetchone()
+            if not importacao:
+                raise HTTPException(status_code=404, detail="Importação não encontrada")
+            criado_em, total_novos, usuario_nome = importacao
+
+            cursor.execute("DELETE FROM mms_certificados WHERE criado_em = %s", (criado_em,))
+            pedidos_removidos = cursor.rowcount
+            if pedidos_removidos > total_novos:
+                # Mais pedidos no mesmo horário do que o lote gravou: não dá para separar com segurança
+                conn.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"O lote tem {total_novos} pedidos novos, mas {pedidos_removidos} batem com o horário. Nada foi apagado."
+                )
+
+            cursor.execute("DELETE FROM mms_importacoes WHERE id = %s", (importacao_id,))
+            conn.commit()
+
+            logger.warning(
+                "MMS: importação %s de %s (%s, %s novos) apagada por %s; %s pedidos removidos",
+                importacao_id, usuario_nome, criado_em, total_novos, current_user.get("nome"), pedidos_removidos
+            )
+            return {"success": True, "pedidos_removidos": pedidos_removidos}
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=f"Erro ao apagar importação: {str(e)}")
         finally:
             cursor.close()
 
